@@ -11,8 +11,6 @@ def test_public_api_is_exported() -> None:
         "Chunk",
         "ChunkConfig",
         "Chunker",
-        "parse_blocks",
-        "split_text",
         "verify_chunks",
         "write_chunks",
         "read_chunks",

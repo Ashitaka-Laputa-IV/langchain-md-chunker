@@ -10,7 +10,8 @@ import random
 
 import pytest
 
-from langchain_md_chunker import ChunkConfig, Chunker, parse_blocks
+from langchain_md_chunker import ChunkConfig, Chunker
+from langchain_md_chunker.blocks import parse_blocks
 
 PIECES = [
     "# Title",

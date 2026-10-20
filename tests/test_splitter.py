@@ -7,14 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import (
-    ChunkConfig,
-    Chunker,
-    langchain_docs,
-    parse_blocks,
-    split_text,
-    verify_chunks,
-)
+from langchain_md_chunker import ChunkConfig, Chunker, langchain_docs, verify_chunks
+from langchain_md_chunker.blocks import parse_blocks
+from langchain_md_chunker.splitter import split_text
 
 
 def test_chunk_text_matches_source_offsets() -> None:

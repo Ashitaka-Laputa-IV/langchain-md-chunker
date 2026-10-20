@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 
-from langchain_md_chunker import parse_blocks
+from langchain_md_chunker.blocks import parse_blocks
 
 
 def kinds(text: str) -> list[str]:
