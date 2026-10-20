@@ -4,6 +4,8 @@
 
 核心是可复用的 Python 包（纯标准库、零运行时依赖）；`demo/` 里的网页只是演示，不参与打包。
 
+API 参考见 [docs/api/index.md](docs/api/index.md)。
+
 ## 特点
 
 - **偏移精确**：chunk 是原文的精确切片，`source[start:end] == chunk.text` 恒成立（切分只挑断点，不改写、不拼接、不重复内容）。
@@ -214,13 +216,14 @@ tests/
 ├── test_package.py     # 包入口、公开 API 与语料预设
 ├── test_fuzz.py        # 固定种子的随机文档不变量测试
 └── test_demo.py        # 演示服务的数据装载、重载容错与路径安全
+docs/api/               # API 参考（纯 Markdown，无需构建）
 data/download_docs.py
 ```
 
 ## 测试
 
 ```bash
-uv run pytest                       # 105 项，秒级
+uv run pytest                       # 134 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
