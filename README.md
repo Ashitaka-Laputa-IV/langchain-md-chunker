@@ -4,7 +4,7 @@
 
 核心是可复用的 Python 包（纯标准库、零运行时依赖）；`demo/` 里的网页只是演示，不参与打包。
 
-API 参考见 [docs/api/index.md](docs/api/index.md)。
+API 参考见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/docs/api/index.md)。
 
 ## 特点
 
@@ -15,6 +15,14 @@ API 参考见 [docs/api/index.md](docs/api/index.md)。
 - **可调参数**：目标长度、要丢弃的块类型/样板前缀均可配置。
 
 ## 快速开始
+
+作为依赖安装（PyPI）：
+
+```bash
+uv add langchain-md-chunker
+```
+
+仓库内开发：
 
 ```bash
 uv sync                                        # 安装（含 dev 依赖）
@@ -62,7 +70,7 @@ from langchain_md_chunker import Chunker, langchain_docs
 chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默认
 ```
 
-自有语料可以自己组合配置：`ChunkConfig(skip_kinds=(...), skip_prefixes=(...))`；预设只是返回 `ChunkConfig` 的工厂函数，见 `presets.py`。分层与扩展点见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+自有语料可以自己组合配置：`ChunkConfig(skip_kinds=(...), skip_prefixes=(...))`；预设只是返回 `ChunkConfig` 的工厂函数，见 `presets.py`。分层与扩展点见 [ARCHITECTURE.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/ARCHITECTURE.md)。
 
 ## 数据格式
 
@@ -177,7 +185,7 @@ manifest = read_manifest("data/chunks")
 公开 API 即 `langchain_md_chunker.__all__`：`Chunker`、`ChunkConfig`、`Chunk`、`langchain_docs`、
 `verify_chunks`、`write_chunks`、`read_chunks`、`build_manifest`、`read_manifest` 及文件常量。
 解析层（`blocks.py`）与切分层（`splitter.py`）属于内部实现，不作为兼容性承诺；
-完整的公开接口清单见 [docs/api/index.md](docs/api/index.md)。
+完整的公开接口清单见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/docs/api/index.md)。
 
 ## 演示前端
 
@@ -221,13 +229,15 @@ tests/
 ├── test_docs.py        # 公开 API 文档覆盖与链接检查
 └── test_demo.py        # 演示服务的数据装载、重载容错与路径安全
 docs/api/               # API 参考（纯 Markdown，无需构建）
+CHANGELOG.md            # 版本变更记录
+RELEASING.md            # PyPI 发布流程与检查清单
 data/download_docs.py
 ```
 
 ## 测试
 
 ```bash
-uv run pytest                       # 127 项，秒级
+uv run pytest                       # 133 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
@@ -242,6 +252,17 @@ uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依�
 - 文件/目录 API 的 `doc` 路径、排序稳定性与 `verify_chunks` 的负例；
 - CLI 退出码、`--verify` 失败、`--max-chars`/`-p` 生效；
 - 语料存在时对全量 4400+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
+
+## 发布
+
+PyPI 包名 `langchain-md-chunker`。版本号、构建、Trusted Publishing 配置与回滚流程见
+[RELEASING.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/RELEASING.md)，
+变更记录见 [CHANGELOG.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/CHANGELOG.md)。
+
+```bash
+uv build                      # 产物：dist/*.whl、dist/*.tar.gz
+uvx --from twine twine check dist/*
+```
 
 ## 版权
 
