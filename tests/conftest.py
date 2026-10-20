@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import Chunker
+from langchain_md_chunker import Chunker, langchain_docs
 
 CORPUS = Path(__file__).resolve().parents[1] / "data" / "langchain-docs"
 
@@ -20,4 +20,4 @@ def corpus_dir() -> Path:
 
 @pytest.fixture(scope="session")
 def corpus_chunks(corpus_dir: Path):
-    return Chunker().split_directory(corpus_dir)
+    return Chunker(langchain_docs()).split_directory(corpus_dir)

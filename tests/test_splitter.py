@@ -10,6 +10,7 @@ import pytest
 from langchain_md_chunker import (
     ChunkConfig,
     Chunker,
+    langchain_docs,
     parse_blocks,
     split_text,
     verify_chunks,
@@ -137,13 +138,14 @@ def test_boilerplate_prefixes_are_skipped() -> None:
         "</div>\n\n"
         "# T\n\nreal content\n"
     )
-    chunks = Chunker().split_text(text)
+    chunks = Chunker(langchain_docs()).split_text(text)
 
     assert len(chunks) == 1
     assert chunks[0].text == "# T\n\nreal content"
 
-    kept = Chunker(ChunkConfig(skip_prefixes=())).split_text(text)
-    assert len(kept) > len(chunks)
+    # 通用默认配置不内置任何语料样板，因此会保留样板块
+    generic = Chunker().split_text(text)
+    assert len(generic) > len(chunks)
 
 
 def test_heading_only_sections_do_not_create_chunks() -> None:

@@ -11,7 +11,7 @@ dependencies = []
 
 [project.scripts]
 chunk = "langchain_md_chunker.cli:main"
-langchain-md-chunker = "langchain_md_chunker:main"
+langchain-md-chunker = "langchain_md_chunker.cli:main"
 
 [dependency-groups]
 dev = [

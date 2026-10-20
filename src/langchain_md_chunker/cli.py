@@ -7,9 +7,11 @@ import sys
 import time
 from pathlib import Path
 
-from .chunker import DEFAULT_PATTERNS, Chunker, verify_chunks
-from .models import ChunkConfig
+from .chunker import DEFAULT_PATTERNS, Chunker
+from .config import ChunkConfig
+from .presets import langchain_docs
 from .storage import build_manifest, write_chunks
+from .verify import verify_chunks
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +31,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=1500,
         help="soft upper bound of one chunk in characters (default: 1500)",
+    )
+    parser.add_argument(
+        "--preset",
+        choices=("langchain-docs", "generic"),
+        default="langchain-docs",
+        help="corpus preset controlling boilerplate dropping (default: langchain-docs)",
     )
     parser.add_argument(
         "--include-headings",
@@ -55,6 +63,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_config(args: argparse.Namespace) -> ChunkConfig:
+    """Resolve the corpus preset into a concrete config."""
+    if args.preset == "langchain-docs":
+        return langchain_docs(max_chars=args.max_chars, include_headings=args.include_headings)
+    return ChunkConfig(max_chars=args.max_chars, include_headings=args.include_headings)
+
+
 def _count(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
@@ -68,9 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        config = ChunkConfig(
-            max_chars=args.max_chars, include_headings=args.include_headings
-        )
+        config = _build_config(args)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

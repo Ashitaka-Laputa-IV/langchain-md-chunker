@@ -1,27 +1,9 @@
-"""包级入口与公开 API 的冒烟测试。"""
+"""包级入口、公开 API 与预设的冒烟测试。"""
 
 from __future__ import annotations
 
-import pytest
-
 import langchain_md_chunker
-from langchain_md_chunker import cli
-
-
-def test_console_entrypoint_delegates_and_exits(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[int] = []
-
-    def fake_main() -> int:
-        calls.append(1)
-        return 0
-
-    monkeypatch.setattr(cli, "main", fake_main)
-
-    with pytest.raises(SystemExit) as excinfo:
-        langchain_md_chunker.main()
-
-    assert excinfo.value.code == 0
-    assert calls == [1]
+from langchain_md_chunker import ChunkConfig, cli, langchain_docs
 
 
 def test_public_api_is_exported() -> None:
@@ -36,6 +18,29 @@ def test_public_api_is_exported() -> None:
         "read_chunks",
         "build_manifest",
         "read_manifest",
+        "langchain_docs",
     ):
         assert hasattr(langchain_md_chunker, name)
         assert name in langchain_md_chunker.__all__
+
+
+def test_console_entrypoint_target_exists() -> None:
+    assert callable(cli.main)
+    assert callable(cli.build_parser)
+
+
+def test_generic_config_has_no_corpus_boilerplate() -> None:
+    assert ChunkConfig().skip_prefixes == ()
+
+
+def test_langchain_docs_preset_drops_known_boilerplate() -> None:
+    config = langchain_docs()
+
+    assert config.skip_prefixes
+    assert config.max_chars == 1500
+    assert not config.include_headings
+
+    custom = langchain_docs(max_chars=800, include_headings=True)
+    assert custom.max_chars == 800
+    assert custom.include_headings
+    assert custom.skip_prefixes == config.skip_prefixes

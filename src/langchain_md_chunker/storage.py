@@ -19,7 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
-from .models import Chunk, ChunkConfig
+from .config import ChunkConfig
+from .models import Chunk
 
 CHUNKS_FILE = "chunks.jsonl"
 MANIFEST_FILE = "manifest.json"

@@ -1,50 +1,9 @@
-"""Data models shared by the chunker, the CLI and the storage layer."""
+"""Output model produced by the chunker."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-
-#: Block kinds that never produce chunk content (frontmatter and inline JS
-#: helpers such as ``export const Foo = ...`` found in the LangChain docs).
-DEFAULT_SKIP_KINDS: tuple[str, ...] = ("frontmatter", "export")
-
-#: Boilerplate that is repeated in every page of the LangChain docs and carries
-#: no retrieval value: the "documentation index" banner and the footer with
-#: "edit this page" links.
-DEFAULT_SKIP_PREFIXES: tuple[str, ...] = (
-    "> ## Documentation Index",
-    '<div className="source-links">',
-)
-
-
-@dataclass(frozen=True, slots=True)
-class ChunkConfig:
-    """Parameters controlling how a document is split.
-
-    Args:
-        max_chars: Soft upper bound for a chunk, measured in characters of the
-            source document. Only atomic blocks (a single code fence, table or
-            paragraph) may exceed it.
-        skip_kinds: Block kinds that are dropped instead of being chunked.
-        skip_prefixes: Blocks whose stripped text starts with one of these
-            prefixes are dropped as boilerplate.
-        include_headings: When true, ``Chunk.content`` is prefixed with the
-            section heading path (``# A`` / ``## B`` / ``### C``), which is
-            usually better input for embeddings. ``Chunk.text`` always stays an
-            exact slice of the source document.
-    """
-
-    max_chars: int = 1500
-    skip_kinds: tuple[str, ...] = DEFAULT_SKIP_KINDS
-    skip_prefixes: tuple[str, ...] = DEFAULT_SKIP_PREFIXES
-    include_headings: bool = False
-
-    def __post_init__(self) -> None:
-        if self.max_chars <= 0:
-            raise ValueError("max_chars must be positive")
-        if any(not prefix.strip() for prefix in self.skip_prefixes):
-            raise ValueError("skip_prefixes must not contain blank prefixes")
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,8 +15,8 @@ class Chunk:
     1-based and inclusive.
 
     ``content`` is what a consumer should embed or display: it equals ``text``
-    unless :attr:`ChunkConfig.include_headings` is enabled, in which case the
-    section heading path is prepended.
+    unless :attr:`langchain_md_chunker.config.ChunkConfig.include_headings` is
+    enabled, in which case the section heading path is prepended.
     """
 
     id: str
@@ -115,9 +74,4 @@ class Chunk:
         )
 
 
-__all__ = [
-    "DEFAULT_SKIP_KINDS",
-    "DEFAULT_SKIP_PREFIXES",
-    "Chunk",
-    "ChunkConfig",
-]
+__all__ = ["Chunk"]

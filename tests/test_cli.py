@@ -72,6 +72,24 @@ def test_cli_include_headings(tmp_path: Path) -> None:
     assert all(record["content"].endswith(record["text"]) for record in records)
 
 
+def test_cli_preset_controls_boilerplate(tmp_path: Path) -> None:
+    source = tmp_path / "docs"
+    source.mkdir()
+    (source / "page.md").write_text(
+        "> ## Documentation Index\n> Fetch the index.\n\n# Title\n\nbody text\n",
+        encoding="utf-8",
+    )
+    default_out = tmp_path / "default"
+    generic_out = tmp_path / "generic"
+
+    assert cli.main([str(source), "-o", str(default_out)]) == 0
+    assert cli.main([str(source), "-o", str(generic_out), "--preset", "generic"]) == 0
+
+    # 默认 langchain-docs 预设丢弃横幅；generic 保留，多出一个 chunk
+    assert chunk_count(default_out) == 1
+    assert chunk_count(generic_out) > chunk_count(default_out)
+
+
 def test_cli_pattern_option(tmp_path: Path) -> None:
     source = make_tree(tmp_path)
     (source / "page.mdx").write_text(DOC, encoding="utf-8")

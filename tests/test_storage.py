@@ -107,7 +107,7 @@ def test_build_manifest_summarises() -> None:
     assert manifest["chunk_chars_min"] <= manifest["chunk_chars_avg"] <= manifest["chunk_chars_max"]
     assert Path(manifest["source_root"]).is_absolute()
     assert manifest["config"]["max_chars"] == 120
-    assert manifest["config"]["skip_prefixes"]
+    assert "skip_prefixes" in manifest["config"]
 
 
 def test_content_roundtrip(tmp_path: Path) -> None:

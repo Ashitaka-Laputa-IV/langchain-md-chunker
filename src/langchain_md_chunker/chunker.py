@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 
-from .models import Chunk, ChunkConfig
+from .config import ChunkConfig
+from .models import Chunk
 from .splitter import RawChunk, split_text
 
 #: Default file patterns understood by :meth:`Chunker.split_directory`.
@@ -107,34 +108,4 @@ class Chunker:
         return chunks
 
 
-def verify_chunks(chunks: Iterable[Chunk], root: str | Path) -> list[str]:
-    """Re-read sources from disk and check that every chunk matches its offsets.
-
-    Unreadable sources are reported as problems instead of raising, so one broken
-    file does not hide every other mismatch.
-    """
-    base = Path(root)
-    texts: dict[str, str] = {}
-    unreadable: set[str] = set()
-    problems: list[str] = []
-
-    for chunk in chunks:
-        if chunk.doc in unreadable:
-            continue
-        if chunk.doc not in texts:
-            try:
-                texts[chunk.doc] = (base / chunk.doc).read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError) as exc:
-                unreadable.add(chunk.doc)
-                problems.append(f"{chunk.doc}: cannot read source file ({type(exc).__name__})")
-                continue
-
-        text = texts[chunk.doc]
-        if not 0 <= chunk.start < chunk.end <= len(text):
-            problems.append(f"{chunk.id} {chunk.doc}: offsets out of range")
-        elif text[chunk.start : chunk.end] != chunk.text:
-            problems.append(f"{chunk.id} {chunk.doc}@{chunk.start}:{chunk.end}: slice mismatch")
-    return problems
-
-
-__all__ = ["DEFAULT_PATTERNS", "Chunker", "verify_chunks"]
+__all__ = ["DEFAULT_PATTERNS", "Chunker"]
