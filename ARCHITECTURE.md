@@ -87,7 +87,7 @@ frontmatter、`export` JS 组件、语料样板并不产出 chunk，同时会把
 ### 4. 语料差异用预设表达
 
 `ChunkConfig` 的默认值不含任何语料特征（`skip_prefixes=()`）。LangChain 文档每页重复的横幅/页脚放在
-`presets.langchain_docs()` 里，由 CLI 默认选用。换语料时用 `--preset generic` 或自己拼 `ChunkConfig`，
+`presets.langchain_docs()` 里，由 CLI 通过 `--preset langchain-docs` 显式选用（默认 `generic`）。换语料时直接拼 `ChunkConfig`，
 不需要改核心代码。
 
 ### 5. 持久化是唯一有副作用的层

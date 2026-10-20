@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import itertools
 
+from langchain_md_chunker import Chunker
 from langchain_md_chunker.blocks import parse_blocks
 
 
@@ -67,6 +68,13 @@ def test_self_closing_mdx_is_single_line() -> None:
 
     assert [block.kind for block in blocks] == ["mdx", "para"]
     assert text[blocks[0].start : blocks[0].end] == '<Card title="x" />'
+
+
+def test_rule_after_paragraph_is_not_swallowed() -> None:
+    text = "para\n***\n\nafter\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["para", "rule", "para"]
 
 
 def test_list_rule_and_quote_blocks() -> None:
@@ -235,4 +243,61 @@ def test_setext_underline_after_blank_line_is_a_rule() -> None:
 
     assert [block.kind for block in blocks] == ["para", "rule", "para"]
 
+def test_mdx_import_is_skipped() -> None:
+    text = "import Tabs from '@theme/Tabs';\n\n# T\n\nbody\n"
+    chunks = Chunker().split_text(text)
+
+    assert len(chunks) == 1
+    assert "import" not in chunks[0].text
+
+
+def test_multiline_import_is_one_block() -> None:
+    text = "import {\n  A,\n  B,\n} from './x';\n\n# T\n\nbody\n"
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "import"
+    assert text[blocks[0].start : blocks[0].end].startswith("import {")
+    assert text[blocks[0].start : blocks[0].end].endswith("from './x';")
+    assert "import" not in Chunker().split_text(text)[0].text
+
+
+def test_mdx_comment_is_skipped() -> None:
+    text = "{/*\n  hidden note\n*/}\n\n# T\n\nbody\n"
+    chunks = Chunker().split_text(text)
+
+    assert len(chunks) == 1
+    assert "hidden note" not in chunks[0].text
+
+
+def test_import_without_semicolon_at_eof() -> None:
+    assert [block.kind for block in parse_blocks("import x")] == ["import"]
+
+
+def test_import_without_semicolon_stops_at_blank_line() -> None:
+    blocks = parse_blocks("import x\n\n# T\n")
+
+    assert [block.kind for block in blocks] == ["import", "heading"]
+
+
+def test_single_line_mdx_comment_is_skipped() -> None:
+    text = "{/* hidden */}\n\n# T\n\nbody\n"
+
+    chunks = Chunker().split_text(text)
+
+    assert len(chunks) == 1
+    assert "hidden" not in chunks[0].text
+
+
+def test_unclosed_mdx_comment_runs_to_eof() -> None:
+    blocks = parse_blocks("{/* hidden")
+
+    assert [block.kind for block in blocks] == ["comment"]
+    assert blocks[0].end == len("{/* hidden")
+
+
+def test_import_inside_fence_stays_code() -> None:
+    text = "```python\nimport os\n```\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["code"]
 

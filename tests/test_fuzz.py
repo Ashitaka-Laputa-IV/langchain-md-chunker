@@ -80,12 +80,6 @@ def check(text: str, config: ChunkConfig) -> None:
         assert chunk.start >= previous_end, "chunk 重叠或乱序"
         previous_end = chunk.end
 
-        if chunk.start != 0:
-            previous = text[chunk.start - 1]
-            # 唯一的例外：文件开头有 BOM，切分从 BOM 之后开始
-            assert previous == "\n" or (chunk.start == 1 and previous == "\ufeff"), "起点不在行边界"
-        if chunk.end != len(text):
-            assert text[chunk.end] in "\r\n", "终点不在行边界"
         assert chunk.start_line == text[: chunk.start].count("\n") + 1
         assert chunk.end_line == text[: chunk.end - 1].count("\n") + 1
 

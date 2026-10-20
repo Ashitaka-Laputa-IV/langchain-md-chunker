@@ -83,11 +83,11 @@ def test_cli_preset_controls_boilerplate(tmp_path: Path) -> None:
     generic_out = tmp_path / "generic"
 
     assert cli.main([str(source), "-o", str(default_out)]) == 0
-    assert cli.main([str(source), "-o", str(generic_out), "--preset", "generic"]) == 0
+    assert cli.main([str(source), "-o", str(generic_out), "--preset", "langchain-docs"]) == 0
 
-    # 默认 langchain-docs 预设丢弃横幅；generic 保留，多出一个 chunk
-    assert chunk_count(default_out) == 1
-    assert chunk_count(generic_out) > chunk_count(default_out)
+    # 默认 generic 保留横幅；langchain-docs 预设丢弃，少一个 chunk
+    assert chunk_count(generic_out) == 1
+    assert chunk_count(default_out) > chunk_count(generic_out)
 
 
 def test_cli_pattern_option(tmp_path: Path) -> None:
@@ -134,9 +134,24 @@ def test_cli_reports_write_failure(
     assert "failed to write" in capsys.readouterr().err
 
 
+def test_cli_accepts_single_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    target = tmp_path / "page.md"
+    target.write_text("# T\n\nbody\n", encoding="utf-8")
+    out = tmp_path / "out"
+
+    assert cli.main([str(target), "-o", str(out)]) == 0
+
+    records = [
+        json.loads(line)
+        for line in (out / CHUNKS_FILE).read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) == 1
+    assert records[0]["doc"] == "page.md"
+
+
 def test_cli_missing_input(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main([str(tmp_path / "missing"), "-o", str(tmp_path / "out")]) == 2
-    assert "source directory not found" in capsys.readouterr().err
+    assert "source path not found" in capsys.readouterr().err
 
 
 def test_cli_requires_input_directory(capsys: pytest.CaptureFixture[str]) -> None:

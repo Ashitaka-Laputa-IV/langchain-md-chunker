@@ -7,15 +7,24 @@
 
 ```python
 from langchain_md_chunker import DEFAULT_PATTERNS, Chunker
+from langchain_md_chunker.chunker import IGNORED_DIRS
 ```
 
 ## `DEFAULT_PATTERNS`
 
 ```python
-DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx")
+DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx", "*.MD", "*.MDX")
 ```
 
 `split_directory` 默认匹配的文件模式。
+
+## `IGNORED_DIRS`
+
+```python
+IGNORED_DIRS: frozenset[str] = frozenset({".git", ".venv", "node_modules", "build", "dist", ...})
+```
+
+`split_directory` 递归时不会进入这些目录（版本控制、虚拟环境、依赖与缓存目录），避免把仓库根目录当语料时误伤。
 
 ## `Chunker`
 
@@ -87,6 +96,8 @@ def split_directory(
 | --- | --- |
 | `root` | 源目录；不存在或不是目录时抛 `NotADirectoryError` |
 | `patterns` | glob 模式序列，可重复；同一文件只会被切分一次 |
+
+遍历时会跳过 `IGNORED_DIRS`（`.git`、`.venv`、`node_modules` 等）；默认模式同时覆盖小写与大写后缀（`*.md` / `*.MD`）。
 
 - 文件按 `path.as_posix()` 排序，输出顺序跨平台稳定；
 - 空目录 / 无匹配返回 `[]`；

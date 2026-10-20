@@ -28,6 +28,8 @@ RULE_RE = re.compile(
     r"^ {0,3}(?:\*[ \t]*){3,}$|^ {0,3}(?:-[ \t]*){3,}$|^ {0,3}(?:_[ \t]*){3,}$"
 )
 SETEXT_RE = re.compile(r"^ {0,3}(?P<marks>=+|-+)[ \t]*$")
+IMPORT_RE = re.compile(r"^import[ \t]+")
+MDX_COMMENT_RE = re.compile(r"^\{/\*")
 
 
 EXPORT_RE = re.compile(
@@ -108,6 +110,18 @@ def parse_blocks(text: str) -> list[Block]:
         if EXPORT_RE.match(source):
             end = _end_of_export(lines, index)
             blocks.append(Block("export", line.start, lines[end].end))
+            index = end + 1
+            continue
+
+        if IMPORT_RE.match(source):
+            end = _end_of_import(lines, index)
+            blocks.append(Block("import", line.start, lines[end].end))
+            index = end + 1
+            continue
+
+        if MDX_COMMENT_RE.match(source):
+            end = _end_of_mdx_comment(lines, index)
+            blocks.append(Block("comment", line.start, lines[end].end))
             index = end + 1
             continue
 
@@ -194,6 +208,38 @@ def _end_of_export(lines: list[Line], index: int) -> int:
     return end
 
 
+def _end_of_import(lines: list[Line], index: int) -> int:
+    """Last line of an ESM import statement (single or multi-line)."""
+    end = index
+    if ";" in lines[index].text:
+        return end
+    while end + 1 < len(lines):
+        following = lines[end + 1].text
+        if (
+            not following.strip()
+            or HEADING_RE.match(following)
+            or FENCE_RE.match(following)
+        ):
+            break
+        end += 1
+        if ";" in following:
+            break
+    return end
+
+
+def _end_of_mdx_comment(lines: list[Line], index: int) -> int:
+    """Last line of an MDX comment (``{/* ... */}``)."""
+    end = index
+    if "*/}" in lines[index].text:
+        return end
+    limit = min(len(lines) - 1, index + 100)
+    while end < limit:
+        end += 1
+        if "*/}" in lines[end].text:
+            break
+    return end
+
+
 def _end_of_table(lines: list[Line], index: int) -> int:
     end = index
     while end + 1 < len(lines) and lines[end + 1].text.lstrip().startswith("|"):
@@ -228,6 +274,7 @@ def _end_of_paragraph(lines: list[Line], index: int) -> int:
             HEADING_RE.match(following)
             or FENCE_RE.match(following)
             or EXPORT_RE.match(following)
+            or RULE_RE.match(following)
             or following.startswith("<")
             or _setext_level(following) is not None
         ):

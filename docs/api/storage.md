@@ -126,7 +126,9 @@ def build_manifest(
   "headings": ["Context overview", "Context engineering"],
   "context": "Context overview > Context engineering",
   "text": "## Context engineering\n\n...",
-  "content": "# Context overview\n\n## Context engineering\n\n..."
+  "content": "# Context overview\n\n## Context engineering\n\n...",
+  "kind": "mixed",
+  "lang": ""
 }
 ```
 

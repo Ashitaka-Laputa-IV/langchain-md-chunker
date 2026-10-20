@@ -84,12 +84,43 @@ def test_oversized_component_splits_between_children() -> None:
         assert chunk.text.lstrip().startswith(("<Tab", "</Tabs>"))
 
 
-def test_single_long_line_terminates() -> None:
+def test_single_long_line_is_split_by_hard_cut() -> None:
     text = "# T\n\n" + "x" * 5000 + "\n"
     chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
 
-    assert len(chunks) == 1
-    assert text[chunks[0].start : chunks[0].end] == chunks[0].text
+    assert len(chunks) > 1
+    assert all(chunk.chars <= 200 for chunk in chunks[1:])
+    assert "".join(chunk.text for chunk in chunks) == text.rstrip("\n")
+
+
+def test_hard_cut_on_exact_multiple_leaves_no_tail() -> None:
+    text = "# T\n\n" + "x" * 200
+    chunks = Chunker(ChunkConfig(max_chars=100)).split_text(text)
+
+    assert "".join(chunk.text for chunk in chunks) == text
+    assert chunks[-1].chars <= 100
+
+
+def test_hard_cut_skips_trailing_whitespace() -> None:
+    text = "# T\n\n" + "x" * 99 + " " * 20 + "\n"
+    chunks = Chunker(ChunkConfig(max_chars=100)).split_text(text)
+
+    assert chunks
+    assert sum(chunk.text.count("x") for chunk in chunks) == 99
+    assert all(chunk.text.strip() for chunk in chunks)
+
+
+def test_long_chinese_paragraph_splits_on_sentence_marks() -> None:
+    sentence = "这是一个用于验证切分的长句子。"
+    text = "# T\n\n" + sentence * 20 + "\n"
+    chunks = Chunker(ChunkConfig(max_chars=100)).split_text(text)
+
+    assert len(chunks) > 1
+    assert all(chunk.chars <= 100 for chunk in chunks[1:])
+    assert "".join(chunk.text for chunk in chunks) == text.rstrip("\n")
+    assert all(chunk.text.strip() for chunk in chunks)
+    # 切点优先落在句号之后
+    assert any(chunk.text.endswith("。") for chunk in chunks[:-1])
 
 
 def test_blocks_are_packed_up_to_max_chars() -> None:
@@ -210,3 +241,22 @@ def test_invalid_config_is_rejected() -> None:
         ChunkConfig(max_chars=0)
     with pytest.raises(ValueError):
         ChunkConfig(skip_prefixes=("  ",))
+
+def test_skipped_heading_does_not_drop_section_body() -> None:
+    text = "# Deprecated\n\nUse the new API instead.\n\n## Next\n\nMore text here.\n"
+
+    chunks = Chunker(ChunkConfig(skip_prefixes=("# Deprecated",))).split_text(text)
+
+    assert [chunk.text for chunk in chunks] == [
+        "Use the new API instead.",
+        "## Next\n\nMore text here.",
+    ]
+
+
+def test_skip_kinds_heading_keeps_body() -> None:
+    text = "# A\n\nbody a\n\n## B\n\nbody b\n"
+
+    chunks = Chunker(ChunkConfig(skip_kinds=("heading",))).split_text(text)
+
+    assert [chunk.text for chunk in chunks] == ["body a", "body b"]
+

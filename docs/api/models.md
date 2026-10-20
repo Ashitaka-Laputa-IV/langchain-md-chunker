@@ -21,6 +21,8 @@ class Chunk:
     context: str
     text: str
     content: str = ""
+    kind: str = "text"
+    lang: str = ""
 ```
 
 单个 chunk 的完整描述。不可变（`frozen=True`），可安全地跨线程/缓存传递。
@@ -35,6 +37,8 @@ class Chunk:
 | `context` | `str` | `headings` 用 ` > ` 连接，可直接拼到 embedding 输入前。 |
 | `text` | `str` | 原文切片，逐字符等于 `source[start:end]`。 |
 | `content` | `str` | 供 embedding / 展示使用：默认等于 `text`；开启 `include_headings` 后为“标题路径 + 空行 + text”。 |
+| `kind` | `str` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx`；跨多种块时为 `mixed`，只有标题时为 `text`。 |
+| `lang` | `str` | chunk 全部来自同一个代码块时为其围栏语言（`python` 等），否则为空。 |
 
 ### `chars`
 
@@ -66,6 +70,8 @@ def to_dict(self) -> dict[str, Any]
     "context": "T",
     "text": "# T\n\nbody",
     "content": "# T\n\nbody",
+    "kind": "para",
+    "lang": "",
 }
 ```
 
@@ -79,7 +85,7 @@ def from_dict(cls, data: dict[str, Any]) -> Chunk
 `to_dict()` 的逆操作，用于读回 JSONL：
 
 - 必填：`id`、`doc`、`start`、`end`；
-- 可选：`start_line`、`end_line`（缺省 `0`）、`headings`（缺省空）、`context`、`text`、`content`；
+- 可选：`start_line`、`end_line`（缺省 `0`）、`headings`（缺省空）、`context`、`text`、`content`、`kind`（缺省 `text`）、`lang`（缺省空）；
 - `content` 缺失或为空时自动回退为 `text`。
 
 ### `content` 的归一化

@@ -10,8 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 #: Block kinds that never produce chunk content, regardless of the corpus:
-#: YAML frontmatter and inline JS helpers such as ``export const Foo = ...``.
-DEFAULT_SKIP_KINDS: tuple[str, ...] = ("frontmatter", "export")
+#: YAML frontmatter, inline JS (``export`` / ``import``) and MDX comments.
+DEFAULT_SKIP_KINDS: tuple[str, ...] = ("frontmatter", "export", "import", "comment")
 
 
 @dataclass(frozen=True, slots=True)

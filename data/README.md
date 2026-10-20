@@ -23,7 +23,7 @@ uv run python data/download_docs.py
 
 下载约 180 个 markdown 文件（约 5 MB）到 `data/langchain-docs/`，目录结构镜像官方路径。
 
-语料更新后，重新运行 `uv run chunk data/langchain-docs` 重建 chunk 索引。
+语料更新后，重新运行 `uv run chunk data/langchain-docs --preset langchain-docs` 重建 chunk 索引。
 
 ## 版权
 

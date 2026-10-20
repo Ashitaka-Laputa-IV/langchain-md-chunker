@@ -29,23 +29,23 @@ uv add langchain-md-chunker
 ```bash
 uv sync                                        # 安装（含 dev 依赖）
 uv run python data/download_docs.py            # 下载语料，约 180 篇 / 5 MB
-uv run chunk data/langchain-docs --verify      # 切分并校验偏移（目录需显式指定）
+uv run chunk data/langchain-docs --preset langchain-docs --verify   # 切分并校验
 uv run python demo/server.py                   # 打开 http://127.0.0.1:8000 浏览
 ```
 
 ## 切分命令
 
 ```bash
-uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--include-headings] [--verify] [--quiet]
+uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-docs] [--include-headings] [--verify] [--quiet]
 ```
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `INPUT` | 必填 | 源文档目录（不内置任何默认语料） |
+| `INPUT` | 必填 | 源文档目录或单个文件（不内置任何默认语料） |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
-| `--preset` | `langchain-docs` | 语料预设：`langchain-docs` 丢弃每页样板，`generic` 不丢弃 |
+| `--preset` | `generic` | 语料预设：`generic` 不丢样板，`langchain-docs` 丢弃 LangChain 文档每页样板 |
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
-| `-p, --pattern` | `*.md`, `*.mdx` | 文件匹配模式，可重复 |
+| `-p, --pattern` | `*.md`, `*.mdx`, `*.MD`, `*.MDX` | 文件匹配模式，可重复 |
 | `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
 | `--verify` | 关闭 | 写盘前回读源文件，逐条校验偏移 |
 | `--quiet` | 关闭 | 只输出错误与警告 |
@@ -64,7 +64,7 @@ data/chunks/
 
 ### 语料预设
 
-核心包本身不知道任何具体语料，默认配置**不做语料相关的丢弃**。CLI 默认启用 `langchain-docs` 预设（丢弃每页重复的索引横幅与页脚）；换成别的文档集时用 `--preset generic`，或在 Python 里显式选择：
+核心包本身不知道任何具体语料，默认配置**不做语料相关的丢弃**，CLI 默认也是 `--preset generic`。处理 LangChain 文档时显式启用 `langchain-docs` 预设（丢弃每页重复的索引横幅与页脚）；在 Python 里同样显式选择：
 
 ```python
 from langchain_md_chunker import Chunker, langchain_docs
@@ -90,7 +90,9 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
   "headings": ["Context overview", "Context engineering"],
   "context": "Context overview > Context engineering",
   "text": "## Context engineering\n\n...",
-  "content": "# Context overview\n\n## Context engineering\n\n..."
+  "content": "# Context overview\n\n## Context engineering\n\n...",
+  "kind": "mixed",
+  "lang": ""
 }
 ```
 
@@ -105,6 +107,8 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 | `context` | `headings` 用 ` > ` 拼接，可直接拼到 embedding 输入前 |
 | `text` | 原文切片，逐字符等于 `source[start:end]` |
 | `content` | 用于 embedding / 展示的文本：默认等于 `text`，开启 `include_headings` 后是“标题路径 + 空行 + text” |
+| `kind` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx`；跨多种块时为 `mixed` |
+| `lang` | 当 chunk 全部来自同一个代码块时为其围栏语言（如 `python`），否则为空 |
 
 > 偏移以码点计（Python `str` 下标）。JavaScript 字符串是 UTF-16，跨码点时需
 > `Array.from(text)` 后再切片——`demo/static/app.js` 已这样做。
@@ -141,7 +145,7 @@ content = "# 1\n## 2\n\n### 3\n\nxxxxx"
   实测语料上 `content` 平均比 `text` 多 43 字符（最大 137）。
 
 ```bash
-uv run chunk data/langchain-docs --include-headings --verify   # 产物带标题前缀
+uv run chunk data/langchain-docs --preset langchain-docs --include-headings --verify
 # 或
 Chunker(ChunkConfig(include_headings=True))
 ```
@@ -156,11 +160,11 @@ Chunker(ChunkConfig(include_headings=True))
 
 **已知限制与设计取舍**：
 
-- 标题行会与正文首块绑定；若正文是单个不可拆的巨型块（超长单行代码、大组件），该 chunk 可能超过 `max_chars`。默认语料中约占 0.1%。
+- 标题行会与正文首块绑定；超长**代码块 / 表格 / MDX 组件**保持原子（按行拆分），chunk 可能超过 `max_chars`。超长单行**正文**会按句末标点 → 逗号 → 硬切回退。
 - `max_chars` 按**字符**而非 token 计量：中英文密度不同，需要 token 预算时请按语料换算后调整。
 - 相邻 chunk **不重叠**：这是“偏移精确、可回溯”的刻意取舍；需要 overlap 的检索策略请在消费端处理。
 - 不支持 4 空格缩进代码块：文档中的缩进更常表示 MDX 组件或列表续行，误判代价高于收益；代码请使用围栏。
-- 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）。
+- 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）；代码/表格被切分后，后续片段不含围栏或表头，可用 `kind` / `lang` 判断并补全。
 - `split_directory` 是单线程同步 IO；5 MB 语料约 0.5 s，更大规模建议按目录分片。
 - 偏移按 Unicode 码点；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
 
@@ -256,7 +260,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 142 项，秒级
+uv run pytest                       # 160 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```

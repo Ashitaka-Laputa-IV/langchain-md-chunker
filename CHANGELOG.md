@@ -7,10 +7,20 @@
 
 ## [0.2.0] - 2026-10-20
 
+### 修复
+
+- **标题被 `skip_prefixes` / `skip_kinds` 过滤时，整节正文会被静默删除**：标题范围现在取自标题块本身，而不是过滤后的首块。
+- MDX 的 `import` 语句与 `{/* ... */}` 注释不再被当成正文（默认跳过 `import` / `comment` 块）。
+- `***` 分隔线不再被吸入上一段落。
+
 ### 变更
 
 - 最低 Python 版本从 3.13 降至 **3.11**，并补充 3.11 / 3.12 classifier。
 - 解析器支持 **Setext 标题**（`===` / `---` 下划线形式）。
+- 超长单行**正文**按句末标点 → 逗号 → 硬切回退切分；代码/表格/组件保持原子。
+- `Chunk` 新增 `kind`（`para`/`code`/`table`/`list`/`quote`/`mdx`/`mixed`）与 `lang` 字段。
+- CLI 默认 `--preset generic`（不再默认套用某家文档站规则）；`INPUT` 支持单个文件。
+- `split_directory` 跳过 `.git`、`.venv`、`node_modules` 等目录。
 
 ### 新增
 

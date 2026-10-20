@@ -133,7 +133,10 @@ def test_from_dict_defaults_content_to_text() -> None:
         "text": "body",
     }
 
-    assert Chunk.from_dict(payload).content == "body"
+    chunk = Chunk.from_dict(payload)
+    assert chunk.content == "body"
+    assert chunk.kind == "text"
+    assert chunk.lang == ""
 
 
 def test_chunk_dict_roundtrip() -> None:

@@ -1,7 +1,7 @@
 # presets —— 语料预设
 
 核心切分器不假设任何具体语料。已知文档集的特殊规则以“返回 `ChunkConfig` 的工厂函数”形式放在
-`presets` 里，由调用方显式选用（CLI 默认选用 `langchain-docs`）。
+`presets` 里，由调用方显式选用（CLI 默认 `generic`，需要时传 `--preset langchain-docs`）。
 
 ## 导入
 

@@ -61,6 +61,24 @@ def test_split_directory_custom_patterns(tmp_path: Path) -> None:
     assert {chunk.doc for chunk in only_mdx} == {"page.mdx"}
 
 
+def test_split_directory_matches_uppercase_suffix(tmp_path: Path) -> None:
+    write(tmp_path / "PAGE.MD", "# Upper\n\nbody\n")
+
+    docs = [chunk.doc for chunk in Chunker().split_directory(tmp_path)]
+
+    assert docs == ["PAGE.MD"]
+
+
+def test_split_directory_skips_dependency_directories(tmp_path: Path) -> None:
+    write(tmp_path / "keep.md", "# Keep\n\nbody\n")
+    write(tmp_path / "node_modules" / "pkg" / "noise.md", "# Noise\n\nbody\n")
+    write(tmp_path / ".venv" / "lib" / "noise.md", "# Noise\n\nbody\n")
+
+    docs = [chunk.doc for chunk in Chunker().split_directory(tmp_path)]
+
+    assert docs == ["keep.md"]
+
+
 def test_split_directory_rejects_missing_dir(tmp_path: Path) -> None:
     with pytest.raises(NotADirectoryError):
         Chunker().split_directory(tmp_path / "missing")
@@ -172,6 +190,27 @@ def test_content_equals_text_by_default() -> None:
 
     assert chunks
     assert all(chunk.content == chunk.text for chunk in chunks)
+
+
+def test_chunk_records_dominant_kind_and_language() -> None:
+    fenced = Chunker(ChunkConfig(max_chars=1000)).split_text(
+        "# T\n\n```python\nprint(1)\n```\n"
+    )
+    assert fenced[0].kind == "code"
+    assert fenced[0].lang == "python"
+
+    table = Chunker().split_text("# T\n\n| a | b |\n| - | - |\n")
+    assert table[0].kind == "table"
+
+    mixed = Chunker(ChunkConfig(max_chars=1000)).split_text(
+        "# T\n\nparagraph\n\n```python\nprint(1)\n```\n"
+    )
+    assert mixed[0].kind == "mixed"
+    assert mixed[0].lang == ""
+
+    paragraph = Chunker().split_text("# T\n\nbody\n")[0]
+    assert paragraph.kind == "para"
+    assert paragraph.lang == ""
 
 
 def test_include_headings_does_not_duplicate_own_heading() -> None:

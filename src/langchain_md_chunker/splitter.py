@@ -32,6 +32,8 @@ class RawChunk:
     context: str
     headings_with_levels: tuple[tuple[int, str], ...] = ()
     starts_with_heading: bool = False
+    kind: str = "text"
+    lang: str = ""
 
     @property
     def headings(self) -> tuple[str, ...]:
@@ -50,6 +52,15 @@ class _Piece:
     start: int
     end: int
     hard_break: bool = False
+    kind: str = "para"
+    lang: str = ""
+
+
+@dataclass(slots=True)
+class _Range:
+    start: int
+    end: int
+    pieces: list[_Piece]
 
 
 def _build_units(blocks: list[Block]) -> list[_Unit]:
@@ -74,6 +85,36 @@ def _build_units(blocks: list[Block]) -> list[_Unit]:
     return units
 
 
+#: Block kinds whose over-long single line may be split inside the line.
+_TEXT_KINDS = frozenset({"para", "list", "quote"})
+_SENTENCE_ENDS = "。！？.!?…"
+_CLAUSE_ENDS = "，,；;、：:"
+
+
+def _last_break(window: str, marks: str) -> int:
+    return max(window.rfind(mark) for mark in marks)
+
+
+def _split_line(text: str, start: int, end: int, max_chars: int) -> list[tuple[int, int]]:
+    """Split one over-long line, preferring sentence end, then clause, then hard cut."""
+    spans: list[tuple[int, int]] = []
+    while end - start > max_chars:
+        window = text[start : start + max_chars]
+        cut = _last_break(window, _SENTENCE_ENDS)
+        if cut < max(1, max_chars // 3):
+            cut = _last_break(window, _CLAUSE_ENDS)
+        if cut < max(1, max_chars // 3):
+            cut = max_chars - 1
+        cut += 1
+        spans.append((start, start + cut))
+        start += cut
+        while start < end and text[start].isspace():
+            start += 1
+    if start < end:
+        spans.append((start, end))
+    return spans
+
+
 def _split_oversized(block: Block, text: str, max_chars: int) -> list[tuple[int, int]]:
     """Split an oversized atomic block on line boundaries.
 
@@ -90,6 +131,14 @@ def _split_oversized(block: Block, text: str, max_chars: int) -> list[tuple[int,
         return base + lines[last].end - (base + lines[first].start)
 
     while start < len(lines):
+        line = lines[start]
+        line_start = base + line.start
+        line_end = base + line.end
+        if block.kind in _TEXT_KINDS and line_end - line_start > max_chars:
+            spans.extend(_split_line(text, line_start, line_end, max_chars))
+            start += 1
+            continue
+
         end = start
         blank_break: int | None = None
         element_break: int | None = None
@@ -143,12 +192,12 @@ def _unit_pieces(unit: _Unit, text: str, config: ChunkConfig) -> list[_Piece]:
             else _split_oversized(block, text, config.max_chars)
         )
         for start, end in spans:
-            pieces.append(_Piece(start, end, hard_break))
+            pieces.append(_Piece(start, end, hard_break, block.kind, block.lang))
             hard_break = False
     return pieces
 
 
-def _emit_unit(unit: _Unit, text: str, config: ChunkConfig) -> list[tuple[int, int]]:
+def _emit_unit(unit: _Unit, text: str, config: ChunkConfig) -> list[_Range]:
     """Turn one section into chunk offset ranges."""
     pieces = _unit_pieces(unit, text, config)
     if not pieces:
@@ -156,30 +205,48 @@ def _emit_unit(unit: _Unit, text: str, config: ChunkConfig) -> list[tuple[int, i
 
     heading = None
     if unit.blocks and unit.blocks[0].kind == "heading":
-        heading = (pieces[0].start, pieces[0].end)
+        # Use the heading block itself, not pieces[0]: the heading may have been
+        # filtered out by skip_prefixes / skip_kinds, leaving the body first.
+        heading = (unit.blocks[0].start, unit.blocks[0].end)
 
-    ranges: list[list[int]] = []
+    ranges: list[_Range] = []
     for piece in pieces:
-        fits = ranges and not piece.hard_break and piece.end - ranges[-1][0] <= config.max_chars
+        fits = ranges and not piece.hard_break and piece.end - ranges[-1].start <= config.max_chars
         # A section heading always travels with the first piece of its body,
         # even when that body is a single oversized block.
         heading_only = (
             not piece.hard_break
             and bool(ranges)
             and heading is not None
-            and ranges[-1][0] == heading[0]
-            and ranges[-1][1] <= heading[1]
+            and ranges[-1].start == heading[0]
+            and ranges[-1].end <= heading[1]
         )
         if fits or heading_only:
-            ranges[-1][1] = piece.end
+            ranges[-1].end = piece.end
+            ranges[-1].pieces.append(piece)
         else:
-            ranges.append([piece.start, piece.end])
+            ranges.append(_Range(piece.start, piece.end, [piece]))
 
-    if ranges and heading is not None and ranges[0] == list(heading):
+    if ranges and heading is not None and [ranges[0].start, ranges[0].end] == list(heading):
         # A heading with no body (or followed by a skipped block) is not a chunk.
         ranges.pop(0)
 
-    return [(start, end) for start, end in ranges]
+    return ranges
+
+
+def _describe(rng: _Range) -> tuple[str, str]:
+    """Dominant block kind and language for a chunk range."""
+    kinds = {piece.kind for piece in rng.pieces if piece.kind != "heading"}
+    if not kinds:  # pragma: no cover - heading-only ranges are dropped
+        return "text", ""
+    if len(kinds) > 1:
+        return "mixed", ""
+
+    kind = next(iter(kinds))
+    if kind != "code":
+        return kind, ""
+    langs = {piece.lang for piece in rng.pieces if piece.kind == "code" and piece.lang}
+    return kind, (langs.pop() if len(langs) == 1 else "")
 
 
 def _line_number(line_starts: list[int], offset: int) -> int:
@@ -201,20 +268,23 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
     for unit in _build_units(parse_blocks(text)):
         context = " > ".join(title for _, title in unit.headings)
         first_block = unit.blocks[0] if unit.blocks else None
-        for start, end in _emit_unit(unit, text, settings):
-            if not text[start:end].strip():  # pragma: no cover - blocks are never blank
+        for rng in _emit_unit(unit, text, settings):
+            if not text[rng.start : rng.end].strip():  # pragma: no cover
                 continue
+            kind, lang = _describe(rng)
             chunks.append(
                 RawChunk(
-                    start=start,
-                    end=end,
-                    start_line=_line_number(line_starts, start),
-                    end_line=_line_number(line_starts, max(start, end - 1)),
+                    start=rng.start,
+                    end=rng.end,
+                    start_line=_line_number(line_starts, rng.start),
+                    end_line=_line_number(line_starts, max(rng.start, rng.end - 1)),
                     context=context,
                     headings_with_levels=unit.headings,
                     starts_with_heading=first_block is not None
                     and first_block.kind == "heading"
-                    and first_block.start == start,
+                    and first_block.start == rng.start,
+                    kind=kind,
+                    lang=lang,
                 )
             )
     return chunks

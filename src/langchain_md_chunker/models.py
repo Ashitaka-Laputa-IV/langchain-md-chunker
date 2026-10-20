@@ -17,6 +17,10 @@ class Chunk:
     ``content`` is what a consumer should embed or display: it equals ``text``
     unless :attr:`langchain_md_chunker.config.ChunkConfig.include_headings` is
     enabled, in which case the section heading path is prepended.
+
+    ``kind`` is the dominant block kind (``para`` / ``code`` / ``table`` /
+    ``list`` / ``quote`` / ``mdx`` / ``mixed``), and ``lang`` is the fence
+    language when the chunk consists of a single code block.
     """
 
     id: str
@@ -29,6 +33,8 @@ class Chunk:
     context: str
     text: str
     content: str = ""
+    kind: str = "text"
+    lang: str = ""
 
     def __post_init__(self) -> None:
         # ``content`` defaults to the source slice, so callers that never ask for
@@ -55,6 +61,8 @@ class Chunk:
             "context": self.context,
             "text": self.text,
             "content": self.content,
+            "kind": self.kind,
+            "lang": self.lang,
         }
 
     @classmethod
@@ -71,6 +79,8 @@ class Chunk:
             context=str(data.get("context", "")),
             text=str(data.get("text", "")),
             content=str(data.get("content") or ""),
+            kind=str(data.get("kind") or "text"),
+            lang=str(data.get("lang") or ""),
         )
 
 

@@ -35,8 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--preset",
         choices=("langchain-docs", "generic"),
-        default="langchain-docs",
-        help="corpus preset controlling boilerplate dropping (default: langchain-docs)",
+        default="generic",
+        help="corpus preset controlling boilerplate dropping (default: generic)",
     )
     parser.add_argument(
         "--include-headings",
@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--pattern",
         dest="patterns",
         action="append",
-        help="file pattern, repeatable (default: *.md and *.mdx)",
+        help="file pattern, repeatable (default: *.md, *.mdx, *.MD, *.MDX)",
     )
     parser.add_argument(
         "--verify",
@@ -78,8 +78,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     source = Path(args.input)
-    if not source.is_dir():
-        print(f"error: source directory not found: {source}", file=sys.stderr)
+    if not source.exists():
+        print(f"error: source path not found: {source}", file=sys.stderr)
         return 2
 
     try:
@@ -91,8 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     chunker = Chunker(config)
     patterns = args.patterns or DEFAULT_PATTERNS
+    root = source.parent if source.is_file() else source
     try:
-        chunks = chunker.split_directory(source, patterns=patterns)
+        if source.is_file():
+            chunks = chunker.split_file(source, root=root)
+        else:
+            chunks = chunker.split_directory(source, patterns=patterns)
     except (OSError, UnicodeDecodeError) as exc:
         print(f"error: failed to read source files: {exc}", file=sys.stderr)
         return 1
@@ -105,13 +109,13 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.verify:
-        problems = verify_chunks(chunks, source)
+        problems = verify_chunks(chunks, root)
         if problems:
             for problem in problems:
                 print(f"error: {problem}", file=sys.stderr)
             return 1
 
-    manifest = build_manifest(chunks, source_root=source, config=config)
+    manifest = build_manifest(chunks, source_root=root, config=config)
     try:
         chunks_path, manifest_path = write_chunks(chunks, args.output, manifest=manifest)
     except OSError as exc:

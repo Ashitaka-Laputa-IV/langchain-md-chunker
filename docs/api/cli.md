@@ -6,7 +6,7 @@ console script：`chunk`（等价入口 `langchain-md-chunker`），实现为 `l
 ## 用法
 
 ```bash
-uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset langchain-docs|generic]
+uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-docs]
              [--include-headings] [-p PATTERN] [--verify] [--quiet]
 ```
 
@@ -14,12 +14,12 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset langchain-docs|gen
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `INPUT` | **必填** | 源文档目录。不内置任何默认语料；目录不存在时退出码 `2`。 |
+| `INPUT` | **必填** | 源文档**目录或单个文件**。不内置任何默认语料；路径不存在时退出码 `2`。 |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
 | `--max-chars` | `1500` | 单 chunk 软上限（原文字符数） |
-| `--preset` | `langchain-docs` | `langchain-docs` 丢弃每页样板；`generic` 不丢弃。见 [presets.md](presets.md) |
+| `--preset` | `generic` | `generic` 不丢任何样板；`langchain-docs` 丢弃 LangChain 文档每页样板。见 [presets.md](presets.md) |
 | `--include-headings` | 关闭 | 把标题路径写入 `content`，见 [config.md](config.md) |
-| `-p, --pattern` | `*.md`、`*.mdx` | 文件匹配模式，可重复 |
+| `-p, --pattern` | `*.md`、`*.mdx`、`*.MD`、`*.MDX` | 文件匹配模式，可重复 |
 | `--verify` | 关闭 | 写盘前回读源文件校验偏移，见 [verify.md](verify.md) |
 | `--quiet` | 关闭 | 只输出错误与警告 |
 
@@ -44,7 +44,7 @@ manifest: data/chunks/manifest.json
 
 ```text
 $ uv run chunk /tmp/missing
-error: source directory not found: /tmp/missing
+error: source path not found: /tmp/missing
 
 $ uv run chunk data/langchain-docs --max-chars 0
 error: max_chars must be positive
@@ -56,11 +56,14 @@ warning: no files matched *.rst under data/langchain-docs; writing an empty inde
 ## 常用组合
 
 ```bash
-# 换语料：不做任何样板丢弃
-uv run chunk path/to/docs --preset generic -o data/chunks
+# LangChain 文档：丢弃每页样板
+uv run chunk data/langchain-docs --preset langchain-docs -o data/chunks
+
+# 单个文件
+uv run chunk path/to/page.md -o data/chunks
 
 # 带标题前缀 + 校验
-uv run chunk data/langchain-docs --include-headings --verify
+uv run chunk data/langchain-docs --preset langchain-docs --include-headings --verify
 
 # 只处理 mdx，且不打印进度
 uv run chunk data/langchain-docs -p '*.mdx' --quiet

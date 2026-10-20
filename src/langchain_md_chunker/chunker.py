@@ -11,7 +11,26 @@ from .models import Chunk
 from .splitter import RawChunk, split_text
 
 #: Default file patterns understood by :meth:`Chunker.split_directory`.
-DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx")
+DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx", "*.MD", "*.MDX")
+
+#: Directories never traversed by :meth:`Chunker.split_directory`.
+IGNORED_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".svn",
+        ".tox",
+        ".venv",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+        "venv",
+    }
+)
 
 
 def _chunk_id(doc: str, start: int, end: int) -> str:
@@ -73,6 +92,8 @@ class Chunker:
                     context=raw.context,
                     text=body,
                     content=_build_content(raw, body, self.config),
+                    kind=raw.kind,
+                    lang=raw.lang,
                 )
             )
         return chunks
@@ -99,7 +120,12 @@ class Chunker:
             raise NotADirectoryError(f"not a directory: {base}")
 
         files: list[Path] = sorted(
-            {path for pattern in patterns for path in base.rglob(pattern)},
+            {
+                path
+                for pattern in patterns
+                for path in base.rglob(pattern)
+                if not IGNORED_DIRS.intersection(path.relative_to(base).parts)
+            },
             key=lambda path: path.as_posix(),
         )
         chunks: list[Chunk] = []
@@ -108,4 +134,4 @@ class Chunker:
         return chunks
 
 
-__all__ = ["DEFAULT_PATTERNS", "Chunker"]
+__all__ = ["DEFAULT_PATTERNS", "IGNORED_DIRS", "Chunker"]
