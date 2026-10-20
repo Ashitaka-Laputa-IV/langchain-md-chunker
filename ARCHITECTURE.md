@@ -37,6 +37,10 @@ cli ──► chunker ──► splitter ──► blocks
  └──► presets ──► config
 ```
 
+**公开面**只有 `langchain_md_chunker.__all__` 中的符号（`Chunker`、`Chunk`、`ChunkConfig`、
+`langchain_docs`、存储/校验函数与文件常量）。`blocks.py` 与 `splitter.py` 是内部实现，不承诺兼容性，
+API 文档只覆盖公开面：[docs/api/index.md](docs/api/index.md)。
+
 ## 数据流
 
 ```

@@ -67,4 +67,4 @@ DEFAULT_SKIP_KINDS: tuple[str, ...] = ("frontmatter", "export")
 ## 另见
 
 - 语料预设：[presets.md](presets.md)
-- 块类型定义：[blocks.md](blocks.md)
+- 块类型由内部解析层识别（`frontmatter`、`export` 等），不属于公开 API。

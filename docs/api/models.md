@@ -106,5 +106,5 @@ assert chunk.chars == 9
 
 ## 另见
 
-- 生成过程：[splitter.md](splitter.md)、[chunker.md](chunker.md)
+- 生成过程：[chunker.md](chunker.md)
 - 标题前缀规则：[config.md](config.md)

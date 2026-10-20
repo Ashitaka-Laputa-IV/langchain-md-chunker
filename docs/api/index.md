@@ -2,7 +2,7 @@
 
 `langchain-md-chunker` v0.1.0。把 markdown / MDX 文档切成带**源文件字符偏移**的 chunk，并可持久化为 JSONL。
 
-本文档是纯 Markdown，可直接在 GitHub / 编辑器里阅读，不依赖文档构建工具。
+本文档只覆盖**公开 API**；内部实现不在兼容性承诺内。纯 Markdown，可直接在 GitHub / 编辑器里阅读。
 
 ## 安装与导入
 
@@ -16,16 +16,14 @@ from langchain_md_chunker import Chunker, ChunkConfig, Chunk, langchain_docs
 
 包没有运行时第三方依赖，核心实现只用标准库。
 
-## 模块地图
+## 公开模块
 
 | 模块 | 职责 | 文档 |
 | --- | --- | --- |
-| `langchain_md_chunker.blocks` | 行 → `Block`：识别标题、围栏代码、表格、引用、MDX 组件、列表、段落、分隔线、frontmatter、JS export | [blocks.md](blocks.md) |
-| `langchain_md_chunker.splitter` | `Block` → 标题分节 → 打包 → `RawChunk`（只产出偏移区间） | [splitter.md](splitter.md) |
-| `langchain_md_chunker.chunker` | 文件 / 目录遍历、绑定 `doc`/`id`、装配 `Chunk` | [chunker.md](chunker.md) |
-| `langchain_md_chunker.models` | 输出模型 `Chunk` | [models.md](models.md) |
+| `langchain_md_chunker.chunker` | 文件 / 目录遍历、绑定 `doc`/`id`、生成 `Chunk` | [chunker.md](chunker.md) |
 | `langchain_md_chunker.config` | `ChunkConfig`（与语料无关的默认值） | [config.md](config.md) |
 | `langchain_md_chunker.presets` | 语料预设（`langchain_docs`） | [presets.md](presets.md) |
+| `langchain_md_chunker.models` | 输出模型 `Chunk` | [models.md](models.md) |
 | `langchain_md_chunker.storage` | JSONL + manifest 读写、统计 | [storage.md](storage.md) |
 | `langchain_md_chunker.verify` | 回读源文件校验偏移 | [verify.md](verify.md) |
 | `langchain_md_chunker.cli` | 命令行 `uv run chunk` | [cli.md](cli.md) |
@@ -61,14 +59,32 @@ chunks = read_chunks("data/chunks")
 problems = verify_chunks(chunks, "data/langchain-docs")   # [] 表示全部一致
 ```
 
-## 公开面与稳定性
+## 公开面
 
-- **稳定面**：`langchain_md_chunker.__all__` 中的名字，以及各模块 `__all__` 中的名字（本文档逐页列出）。
-  当前导出：`CHUNKS_FILE`、`DEFAULT_PATTERNS`、`MANIFEST_FILE`、`Block`、`Chunk`、`ChunkConfig`、
-  `Chunker`、`Line`、`RawChunk`、`__version__`、`build_manifest`、`langchain_docs`、`parse_blocks`、
-  `read_chunks`、`read_manifest`、`split_text`、`verify_chunks`、`write_chunks`。
-- **内部实现**：以 `_` 开头的名字（如 `_build_units`、`_find_mdx_close`）不属于公开面，可能随时调整。
-- 版本遵循语义化版本；`0.x` 期间允许次版本号引入破坏性变更，变更会记录在提交与 README 中。
+**稳定面**就是 `langchain_md_chunker.__all__`：
+
+```text
+CHUNKS_FILE  DEFAULT_PATTERNS  MANIFEST_FILE  Chunk  ChunkConfig  Chunker
+__version__  build_manifest  langchain_docs  read_chunks  read_manifest
+verify_chunks  write_chunks
+```
+
+其中 `__version__` 是包版本号（当前 `0.1.0`）。
+
+- `Chunker` 是唯一入口，`split_text` / `split_file` / `split_directory` 三个方法覆盖内存、单文件、目录。
+- 配置、预设、模型、存储、校验、CLI 的公开名字见各页顶部的 `__all__` 说明。
+- 以 `_` 开头的名字（如 `_build_units`、`_find_mdx_close`）属于内部实现，可能随时调整。
+
+### 内部实现（非公开）
+
+以下模块是实现细节，**不属于公开 API**，不保证兼容性，也不在本文档范围内：
+
+| 模块 | 说明 |
+| --- | --- |
+| `langchain_md_chunker.blocks` | 行 → `Block` 解析（围栏、表格、MDX、export 配平等） |
+| `langchain_md_chunker.splitter` | 标题分节、打包、超长块拆分，产出 `RawChunk` |
+
+需要这些层的能力时，优先用 `Chunker`；确有必要可直接导入，但请锁定版本。
 
 ## 三条不变量
 
@@ -82,5 +98,5 @@ problems = verify_chunks(chunks, "data/langchain-docs")   # [] 表示全部一�
 
 ## 另见
 
-- 项目总览与命令行用法：[../README.md](../../README.md)
-- 分层与扩展点：[../ARCHITECTURE.md](../../ARCHITECTURE.md)
+- 项目总览与命令行用法：[../../README.md](../../README.md)
+- 分层与扩展点：[../../ARCHITECTURE.md](../../ARCHITECTURE.md)

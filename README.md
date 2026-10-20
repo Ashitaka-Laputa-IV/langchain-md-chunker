@@ -174,7 +174,10 @@ chunks = read_chunks("data/chunks")          # 目录或 .jsonl 均可
 manifest = read_manifest("data/chunks")
 ```
 
-公开 API：`Chunker`、`ChunkConfig`、`Chunk`、`split_text`、`parse_blocks`、`verify_chunks`、`write_chunks`、`read_chunks`、`build_manifest`、`read_manifest`。
+公开 API 即 `langchain_md_chunker.__all__`：`Chunker`、`ChunkConfig`、`Chunk`、`langchain_docs`、
+`verify_chunks`、`write_chunks`、`read_chunks`、`build_manifest`、`read_manifest` 及文件常量。
+解析层（`blocks.py`）与切分层（`splitter.py`）属于内部实现，不作为兼容性承诺；
+完整的公开接口清单见 [docs/api/index.md](docs/api/index.md)。
 
 ## 演示前端
 
@@ -193,9 +196,9 @@ uv run python demo/server.py --port 8000
 
 ```
 src/langchain_md_chunker/
-├── __init__.py     # 公开 API
-├── blocks.py       # 解析层：行 → Block（围栏/表格/MDX/引用…）
-├── splitter.py     # 切分层：Block → 分节打包 → RawChunk(偏移)
+├── __init__.py     # 公开 API（__all__）
+├── blocks.py       # 内部：行 → Block（围栏/表格/MDX/引用…）
+├── splitter.py     # 内部：Block → 分节打包 → RawChunk(偏移)
 ├── chunker.py      # 编排：文件 / 目录 + 标题前缀 → Chunk
 ├── models.py       # 输出模型 Chunk
 ├── config.py       # ChunkConfig（与语料无关的默认值）
@@ -215,6 +218,7 @@ tests/
 ├── test_cli.py         # 命令行端到端与退出码
 ├── test_package.py     # 包入口、公开 API 与语料预设
 ├── test_fuzz.py        # 固定种子的随机文档不变量测试
+├── test_docs.py        # 公开 API 文档覆盖与链接检查
 └── test_demo.py        # 演示服务的数据装载、重载容错与路径安全
 docs/api/               # API 参考（纯 Markdown，无需构建）
 data/download_docs.py
@@ -223,7 +227,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 134 项，秒级
+uv run pytest                       # 127 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
