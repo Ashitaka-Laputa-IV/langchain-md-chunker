@@ -31,6 +31,7 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--include-headi
 | --- | --- | --- |
 | `INPUT` | 必填 | 源文档目录（不内置任何默认语料） |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
+| `--preset` | `langchain-docs` | 语料预设：`langchain-docs` 丢弃每页样板，`generic` 不丢弃 |
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
 | `-p, --pattern` | `*.md`, `*.mdx` | 文件匹配模式，可重复 |
 | `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
@@ -48,6 +49,18 @@ data/chunks/
 两个文件都是“临时文件 + 原子替换”写入：切分时刷新演示页面，不会读到写了一半的索引。
 
 `data/langchain-docs/` 与 `data/chunks/` 都在 `.gitignore` 中：语料和派生产物可随时重建，不入库。
+
+### 语料预设
+
+核心包本身不知道任何具体语料，默认配置**不做语料相关的丢弃**。CLI 默认启用 `langchain-docs` 预设（丢弃每页重复的索引横幅与页脚）；换成别的文档集时用 `--preset generic`，或在 Python 里显式选择：
+
+```python
+from langchain_md_chunker import Chunker, langchain_docs
+
+chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默认
+```
+
+自有语料可以自己组合配置：`ChunkConfig(skip_kinds=(...), skip_prefixes=(...))`；预设只是返回 `ChunkConfig` 的工厂函数，见 `presets.py`。分层与扩展点见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 数据格式
 
@@ -179,10 +192,14 @@ uv run python demo/server.py --port 8000
 ```
 src/langchain_md_chunker/
 ├── __init__.py     # 公开 API
-├── models.py       # Chunk / ChunkConfig
-├── splitter.py     # 块解析 + 切分算法
-├── chunker.py      # 文件 / 目录级封装
+├── blocks.py       # 解析层：行 → Block（围栏/表格/MDX/引用…）
+├── splitter.py     # 切分层：Block → 分节打包 → RawChunk(偏移)
+├── chunker.py      # 编排：文件 / 目录 + 标题前缀 → Chunk
+├── models.py       # 输出模型 Chunk
+├── config.py       # ChunkConfig（与语料无关的默认值）
+├── presets.py      # 语料预设（langchain-docs）
 ├── storage.py      # JSONL + manifest 读写
+├── verify.py       # 偏移一致性校验
 └── cli.py          # `uv run chunk <INPUT>`
 demo/
 ├── server.py       # 演示服务（stdlib）
@@ -194,7 +211,8 @@ tests/
 ├── test_chunker.py     # 文件/目录 API、编码（Unicode、CRLF）、校验、幂等
 ├── test_storage.py     # JSONL / manifest 往返
 ├── test_cli.py         # 命令行端到端与退出码
-├── test_package.py     # 包入口与公开 API
+├── test_package.py     # 包入口、公开 API 与语料预设
+├── test_fuzz.py        # 固定种子的随机文档不变量测试
 └── test_demo.py        # 演示服务的数据装载、重载容错与路径安全
 data/download_docs.py
 ```
@@ -202,7 +220,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 102 项，秒级
+uv run pytest                       # 105 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
