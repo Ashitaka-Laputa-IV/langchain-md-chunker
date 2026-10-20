@@ -52,7 +52,7 @@ class _Piece:
     hard_break: bool = False
 
 
-def build_units(blocks: list[Block]) -> list[_Unit]:
+def _build_units(blocks: list[Block]) -> list[_Unit]:
     """Group blocks into heading-scoped units."""
     units: list[_Unit] = []
     stack: list[tuple[int, str]] = []
@@ -198,7 +198,7 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
             line_starts.append(position + 1)
 
     chunks: list[RawChunk] = []
-    for unit in build_units(parse_blocks(text)):
+    for unit in _build_units(parse_blocks(text)):
         context = " > ".join(title for _, title in unit.headings)
         first_block = unit.blocks[0] if unit.blocks else None
         for start, end in _emit_unit(unit, text, settings):
@@ -220,12 +220,4 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
     return chunks
 
 
-__all__ = [
-    "Block",
-    "RawChunk",
-    "build_units",
-    "parse_blocks",
-    "split_text",
-]
-
-__all__ = ["RawChunk", "build_units", "split_text"]
+__all__ = ["RawChunk", "split_text"]
