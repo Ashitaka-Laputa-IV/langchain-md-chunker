@@ -30,7 +30,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="chunk 输出目录（默认 data/chunks）",
     )
     parser.add_argument("--max-chars", type=int, default=1500, help="单个 chunk 的目标上限字符数")
-    parser.add_argument("--min-chars", type=int, default=250, help="过小 chunk 的合并阈值")
     parser.add_argument(
         "-p",
         "--pattern",
@@ -56,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        config = ChunkConfig(max_chars=args.max_chars, min_chars=args.min_chars)
+        config = ChunkConfig(max_chars=args.max_chars)
     except ValueError as exc:
         print(f"错误：{exc}", file=sys.stderr)
         return 2
@@ -79,8 +78,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.quiet:
         print(
             f"{manifest['doc_count']} 篇文档 -> {manifest['chunk_count']} 个 chunk "
-            f"（平均 {manifest['avg_chars']} 字符，最大 {manifest['max_chars']}），"
-            f"耗时 {elapsed:.2f}s"
+            f"（平均 {manifest['chunk_chars_avg']} 字符，"
+            f"最大 {manifest['chunk_chars_max']}），耗时 {elapsed:.2f}s"
         )
         print(f"chunk: {chunks_path}")
         print(f"清单: {manifest_path}")

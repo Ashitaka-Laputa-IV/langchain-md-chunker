@@ -85,16 +85,15 @@ def build_manifest(
         "source_root": str(Path(source_root).resolve()),
         "config": {
             "max_chars": config.max_chars,
-            "min_chars": config.min_chars,
             "skip_kinds": list(config.skip_kinds),
             "skip_prefixes": list(config.skip_prefixes),
         },
         "doc_count": len(docs),
         "chunk_count": len(chunks),
         "total_chars": sum(sizes),
-        "min_chars": min(sizes, default=0),
-        "avg_chars": round(sum(sizes) / len(sizes), 1) if sizes else 0,
-        "max_chars": max(sizes, default=0),
+        "chunk_chars_min": min(sizes, default=0),
+        "chunk_chars_avg": round(sum(sizes) / len(sizes), 1) if sizes else 0,
+        "chunk_chars_max": max(sizes, default=0),
     }
 
 

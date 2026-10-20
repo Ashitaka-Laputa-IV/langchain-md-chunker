@@ -211,7 +211,9 @@ def _read_fence(
     char = fence[0]
     info = match.group("info").strip()
     lang = info.split()[0].strip("{}.") if info else ""
-    closing = re.compile(rf"^ {{0,3}}{re.escape(char)}{{3,}}[ \t]*$")
+    # CommonMark: a closing fence must be at least as long as the opening one,
+    # otherwise ``` inside ````` would terminate the outer block.
+    closing = re.compile(rf"^ {{0,3}}{re.escape(char)}{{{len(fence)},}}[ \t]*$")
 
     end = index + 1
     while end < len(lines) and not closing.match(lines[end].text):
@@ -241,7 +243,8 @@ def _find_mdx_close(lines: list[_Line], index: int, name: str, limit: int = 400)
     cursor = index + 1
     while cursor < stop:
         current = lines[cursor].text
-        if current.startswith("<") and open_re.match(current):
+        # Nested components are usually indented, so match the tag after lstripping.
+        if open_re.match(current.lstrip()):
             depth += 1
         if close_tag in current:
             depth -= 1
@@ -276,28 +279,44 @@ def build_units(blocks: list[Block]) -> list[_Unit]:
 
 
 def _split_oversized(block: Block, text: str, max_chars: int) -> list[tuple[int, int]]:
-    """Split an oversized atomic block on line boundaries (prefers blank lines)."""
+    """Split an oversized atomic block on line boundaries.
+
+    Break points prefer, in order: the start of a nested element (so oversized
+    ``<Tabs>``/``<Steps>`` blocks break between their children instead of inside
+    one), then a blank line, then an arbitrary line.
+    """
     lines = _lines(text[block.start : block.end])
     base = block.start
     spans: list[tuple[int, int]] = []
     start = 0
 
+    def size(first: int, last: int) -> int:
+        return base + lines[last].end - (base + lines[first].start)
+
     while start < len(lines):
         end = start
         blank_break: int | None = None
+        element_break: int | None = None
         while end + 1 < len(lines):
             candidate = base + lines[end + 1].end
             if candidate - (base + lines[start].start) > max_chars:
                 break
             end += 1
-            if not lines[end].text.strip():
+            stripped = lines[end].text.strip()
+            if not stripped:
                 blank_break = end
-        if (
-            blank_break is not None
-            and blank_break > start
-            and base + lines[blank_break].end - (base + lines[start].start) >= max_chars * 0.4
-        ):
+            elif stripped.startswith("<") and not stripped.startswith("</"):
+                element_break = end
+
+        if blank_break is not None and blank_break > start and size(start, blank_break) >= max_chars * 0.4:
             end = blank_break
+        if (
+            element_break is not None
+            and element_break - 1 > start
+            and size(start, element_break - 1) >= max_chars * 0.4
+        ):
+            end = element_break - 1
+
         spans.append((base + lines[start].start, base + lines[end].end))
         start = end + 1
 
@@ -340,7 +359,6 @@ def _emit_unit(unit: _Unit, text: str, config: ChunkConfig) -> list[tuple[int, i
         heading = (pieces[0].start, pieces[0].end)
 
     ranges: list[list[int]] = []
-    starts_hard: list[bool] = []
     for piece in pieces:
         fits = ranges and not piece.hard_break and piece.end - ranges[-1][0] <= config.max_chars
         # A section heading always travels with the first piece of its body,
@@ -356,23 +374,10 @@ def _emit_unit(unit: _Unit, text: str, config: ChunkConfig) -> list[tuple[int, i
             ranges[-1][1] = piece.end
         else:
             ranges.append([piece.start, piece.end])
-            starts_hard.append(piece.hard_break)
 
-    def merge(index: int, into: int) -> None:
-        ranges[into][1] = ranges[index][1]
-        ranges.pop(index)
-        starts_hard.pop(index)
-
-    if len(ranges) > 1 and ranges[-1][1] - ranges[-1][0] < config.min_chars:
-        if not starts_hard[-1] and ranges[-1][1] - ranges[-2][0] <= config.max_chars:
-            merge(-1, -2)
-    if len(ranges) > 1 and ranges[0][1] - ranges[0][0] < config.min_chars:
-        if not starts_hard[1] and ranges[1][1] - ranges[0][0] <= config.max_chars:
-            merge(1, 0)
     if ranges and heading is not None and ranges[0] == list(heading):
         # A heading with no body (or followed by a skipped block) is not a chunk.
         ranges.pop(0)
-        starts_hard.pop(0)
 
     return [(start, end) for start, end in ranges]
 
@@ -396,7 +401,7 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
     for unit in build_units(parse_blocks(text)):
         context = " > ".join(unit.headings)
         for start, end in _emit_unit(unit, text, settings):
-            if not text[start:end].strip():
+            if not text[start:end].strip():  # pragma: no cover - blocks are never blank
                 continue
             chunks.append(
                 RawChunk(

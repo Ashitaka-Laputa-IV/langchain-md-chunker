@@ -64,7 +64,7 @@ async function boot() {
 function renderStats() {
   const docCount = state.manifest.doc_count ?? Object.keys(state.docs).length;
   const chunkCount = state.manifest.chunk_count ?? state.chunks.length;
-  const avg = state.manifest.avg_chars ?? 0;
+  const avg = state.manifest.chunk_chars_avg ?? 0;
   el.stats.textContent = `${docCount} 篇文档 · ${chunkCount} 个 chunk · 平均 ${avg} 字符`;
 }
 

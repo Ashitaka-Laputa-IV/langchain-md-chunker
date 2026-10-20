@@ -26,23 +26,18 @@ class ChunkConfig:
         max_chars: Soft upper bound for a chunk, measured in characters of the
             source document. Only atomic blocks (a single code fence, table or
             paragraph) may exceed it.
-        min_chars: Chunks smaller than this are merged into a neighbour when the
-            merged chunk still fits in ``max_chars``.
         skip_kinds: Block kinds that are dropped instead of being chunked.
         skip_prefixes: Blocks whose stripped text starts with one of these
             prefixes are dropped as boilerplate.
     """
 
     max_chars: int = 1500
-    min_chars: int = 250
     skip_kinds: tuple[str, ...] = DEFAULT_SKIP_KINDS
     skip_prefixes: tuple[str, ...] = DEFAULT_SKIP_PREFIXES
 
     def __post_init__(self) -> None:
         if self.max_chars <= 0:
             raise ValueError("max_chars must be positive")
-        if not 0 <= self.min_chars <= self.max_chars:
-            raise ValueError("min_chars must be between 0 and max_chars")
         if any(not prefix.strip() for prefix in self.skip_prefixes):
             raise ValueError("skip_prefixes must not contain blank prefixes")
 

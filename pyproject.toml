@@ -16,8 +16,19 @@ langchain-md-chunker = "langchain_md_chunker:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
