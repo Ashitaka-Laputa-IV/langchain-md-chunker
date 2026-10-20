@@ -5,7 +5,7 @@
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-20
+## [0.3.0] - 2026-10-20
 
 ### 修复
 
@@ -15,12 +15,17 @@
 
 ### 变更
 
-- 最低 Python 版本从 3.13 降至 **3.11**，并补充 3.11 / 3.12 classifier。
-- 解析器支持 **Setext 标题**（`===` / `---` 下划线形式）。
 - 超长单行**正文**按句末标点 → 逗号 → 硬切回退切分；代码/表格/组件保持原子。
 - `Chunk` 新增 `kind`（`para`/`code`/`table`/`list`/`quote`/`mdx`/`mixed`）与 `lang` 字段。
 - CLI 默认 `--preset generic`（不再默认套用某家文档站规则）；`INPUT` 支持单个文件。
-- `split_directory` 跳过 `.git`、`.venv`、`node_modules` 等目录。
+- `split_directory` 跳过 `.git`、`.venv`、`node_modules` 等目录，默认模式覆盖 `*.MD` / `*.MDX`。
+
+## [0.2.0] - 2026-10-20
+
+### 变更
+
+- 最低 Python 版本从 3.13 降至 **3.11**，并补充 3.11 / 3.12 classifier。
+- 解析器支持 **Setext 标题**（`===` / `---` 下划线形式）。
 
 ### 新增
 
@@ -53,6 +58,7 @@
 - `chunks.jsonl` 与 `manifest.json` 分别原子替换，不是跨文件事务。
 - 仅支持 Python 3.13+。
 
-[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/releases/tag/v0.1.0

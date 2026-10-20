@@ -21,7 +21,8 @@
 ## 已发布版本
 
 - `0.1.0`（2026-10-20）已通过 API token 手动发布到 PyPI。
-- `0.2.0`（2026-10-20）已发布。后续版本建议改用 Trusted Publishing。
+- `0.2.0`（2026-10-20）已发布。
+- `0.3.0`（2026-10-20）已发布。后续版本建议改用 Trusted Publishing。
 
 **Token 安全**：发布用的 token 不要写入仓库、脚本或 CI 配置；只通过 `UV_PUBLISH_TOKEN`
 环境变量传入。若 token 曾在聊天/日志中出现，发布完成后立即在 PyPI 账户设置中撤销并重新生成。
@@ -60,8 +61,8 @@ PY
 
 # 5. 提交并打 tag，推送后由 CI 发布
 git add -A
-git commit -m "chore(release): v0.2.0"
-git tag v0.2.0
+git commit -m "chore(release): v0.3.0"
+git tag v0.3.0
 git push origin main --tags
 ```
 
@@ -85,7 +86,7 @@ CI 的 `pypa/gh-action-pypi-publish` 已开启 `skip-existing`，重复触发 ta
 - [ ] 全量测试与 `ruff` 通过
 - [ ] wheel 冒烟测试通过（CLI、导入、切分）
 - [ ] sdist 体积正常（只含 `pyproject.toml`、`README.md`、`src/`）
-- [ ] git tag 与版本号一致（`v0.2.0`）
+- [ ] git tag 与版本号一致（`v0.3.0`）
 
 ## 回滚
 
