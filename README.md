@@ -1,5 +1,7 @@
 # langchain-md-chunker
 
+[![PyPI](https://img.shields.io/pypi/v/langchain-md-chunker.svg)](https://pypi.org/project/langchain-md-chunker/)
+
 把 markdown / MDX 文档切成 chunk，并为每个 chunk 记录**源文件路径 + 字符偏移**，方便回溯原文。
 
 核心是可复用的 Python 包（纯标准库、零运行时依赖）；`demo/` 里的网页只是演示，不参与打包。

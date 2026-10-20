@@ -18,6 +18,13 @@
    - Environment：`pypi`
 4. **GitHub Environment**：仓库 Settings → Environments 新建 `pypi`（可加人工审批）。
 
+## 已发布版本
+
+- `0.1.0`（2026-10-20）已通过 API token 手动发布到 PyPI。后续版本建议改用 Trusted Publishing。
+
+**Token 安全**：发布用的 token 不要写入仓库、脚本或 CI 配置；只通过 `UV_PUBLISH_TOKEN`
+环境变量传入。若 token 曾在聊天/日志中出现，发布完成后立即在 PyPI 账户设置中撤销并重新生成。
+
 ## 每次发布
 
 ```bash
@@ -63,8 +70,10 @@ git push origin main --tags
 
 ```bash
 uv build
-uv publish --token "$UV_PUBLISH_TOKEN"
+UV_PUBLISH_TOKEN=pypi-... uv publish dist/*
 ```
+
+CI 的 `pypa/gh-action-pypi-publish` 已开启 `skip-existing`，重复触发 tag 不会因版本已存在而失败。
 
 ## 发布前检查清单
 
