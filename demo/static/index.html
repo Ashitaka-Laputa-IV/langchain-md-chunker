@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>langchain-md-chunker · demo</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      langchain-md-chunker
+      <span class="badge">demo</span>
+    </div>
+    <div class="stats" id="stats">加载中…</div>
+    <input id="search" class="search" type="search" autocomplete="off"
+           placeholder="过滤：文档路径 / 标题 / 正文">
+  </header>
+
+  <main class="layout">
+    <section class="list-pane" aria-label="chunk 列表">
+      <div class="list-head">
+        <span id="list-count">—</span>
+        <span class="hint">点击 [序号] 跳转到源文件对应位置</span>
+      </div>
+      <ol id="chunk-list" class="chunk-list"></ol>
+      <p id="list-empty" class="empty" hidden>没有匹配的 chunk</p>
+    </section>
+
+    <aside class="source-pane" aria-label="源文件">
+      <div class="source-head">
+        <div class="source-title" id="source-title">选择一个 chunk 查看源文件</div>
+        <div class="source-meta" id="source-meta"></div>
+      </div>
+      <pre id="source-body" class="source-body"><code class="placeholder">点击左侧任意 chunk…</code></pre>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
