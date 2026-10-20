@@ -57,5 +57,12 @@ def test_readme_uses_absolute_links() -> None:
         )
 
 
+def test_license_is_declared() -> None:
+    project = read_pyproject()["project"]
+    assert project["license"] == "MIT"
+    assert project["license-files"] == ["LICENSE"]
+    assert (ROOT / "LICENSE").is_file()
+
+
 def test_packaged_readme_is_readme_md() -> None:
     assert read_pyproject()["project"]["readme"] == "README.md"

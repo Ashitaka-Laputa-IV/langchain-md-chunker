@@ -3,6 +3,8 @@ name = "langchain-md-chunker"
 version = "0.1.0"
 description = "Split markdown/MDX into chunks that keep exact source character offsets"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "Ashitaka-Laputa-IV", email = "Ashitaka-Laputa-IV@outlook.com" }
 ]

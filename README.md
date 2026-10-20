@@ -237,7 +237,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 133 项，秒级
+uv run pytest                       # 134 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
@@ -265,5 +265,7 @@ uvx --from twine twine check dist/*
 ```
 
 ## 版权
+
+代码以 [MIT License](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/LICENSE) 发布。
 
 `data/langchain-docs/` 中的文档版权归 LangChain 所有，仅用于本地学习与测试。

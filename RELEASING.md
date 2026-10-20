@@ -5,11 +5,10 @@
 
 ## 一次性准备
 
-1. **许可证（必做，尚未完成）**：仓库目前没有 `LICENSE` 文件，`pyproject.toml` 也没有 `license` 字段。
-   选定许可证后：
-   - 添加 `LICENSE` 文件；
-   - 在 `pyproject.toml` 的 `[project]` 中加入 SPDX 表达式，例如 `license = "MIT"`；
-   - 重新构建并确认 `METADATA` 中出现 `License-Expression`。
+1. **许可证**：已配置 MIT。
+   - `LICENSE` 文件位于仓库根目录；
+   - `pyproject.toml` 使用 `license = "MIT"` 与 `license-files = ["LICENSE"]`；
+   - 构建后确认 `METADATA` 中出现 `License-Expression: MIT` 与 `License-File: LICENSE`。
 2. **PyPI 账号**：注册 <https://pypi.org>，开启两步验证（发布必需）。
 3. **Trusted Publisher**：在 PyPI 项目页面（首次发布前在 *Publishing* 设置里）添加
    GitHub publisher：
@@ -72,7 +71,7 @@ uv publish --token "$UV_PUBLISH_TOKEN"
 - [ ] `pyproject.toml` 与 `__init__.__version__` 版本一致（`tests/test_release.py` 会拦截）
 - [ ] `CHANGELOG.md` 已记录本次变更
 - [ ] `README.md` 不含相对链接（PyPI 上会 404，测试会拦截）
-- [ ] `LICENSE` 与 `license` 字段已配置
+- [x] `LICENSE` 与 `license` 字段已配置（MIT）
 - [ ] 全量测试与 `ruff` 通过
 - [ ] wheel 冒烟测试通过（CLI、导入、切分）
 - [ ] sdist 体积正常（只含 `pyproject.toml`、`README.md`、`src/`）
