@@ -78,7 +78,7 @@ def test_verify_chunks_passes_and_detects_tampering(tmp_path: Path) -> None:
     out_of_range = replace(chunks[0], start=10_000, end=20_000, text="")
     problems = verify_chunks([out_of_range], tmp_path)
     assert len(problems) == 1
-    assert "超出文件长度" in problems[0]
+    assert "out of range" in problems[0]
 
 
 def test_chunk_without_content_defaults_to_text() -> None:
@@ -109,7 +109,7 @@ def test_verify_chunks_reports_missing_source(tmp_path: Path) -> None:
 
     # 同一文档只报告一次，后续 chunk 不再重复读取
     assert len(problems) == 1
-    assert "无法读取" in problems[0]
+    assert "cannot read" in problems[0]
 
 
 def test_split_directory_orders_by_posix_path(tmp_path: Path) -> None:

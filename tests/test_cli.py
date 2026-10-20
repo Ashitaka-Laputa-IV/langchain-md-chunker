@@ -30,7 +30,7 @@ def test_cli_writes_store(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert cli.main([str(source), "-o", str(out)]) == 0
 
     captured = capsys.readouterr()
-    assert "1 篇文档" in captured.out
+    assert "1 document" in captured.out
     assert (out / CHUNKS_FILE).is_file()
     assert (out / MANIFEST_FILE).is_file()
 
@@ -91,7 +91,7 @@ def test_cli_warns_when_pattern_matches_nothing(
 
     assert cli.main([str(source), "-o", str(tmp_path / "out"), "-p", "*.rst"]) == 0
 
-    assert "没有匹配" in capsys.readouterr().err
+    assert "no files matched" in capsys.readouterr().err
     assert chunk_count(tmp_path / "out") == 0
 
 
@@ -102,7 +102,7 @@ def test_cli_reports_unreadable_source(
     (source / "broken.md").write_bytes(b"# T\n\n\xff\xfe\n")
 
     assert cli.main([str(source), "-o", str(tmp_path / "out")]) == 1
-    assert "读取源文件失败" in capsys.readouterr().err
+    assert "failed to read source" in capsys.readouterr().err
 
 
 def test_cli_reports_write_failure(
@@ -113,19 +113,28 @@ def test_cli_reports_write_failure(
     out.write_text("not a directory", encoding="utf-8")
 
     assert cli.main([str(source), "-o", str(out)]) == 1
-    assert "写入" in capsys.readouterr().err
+    assert "failed to write" in capsys.readouterr().err
 
 
 def test_cli_missing_input(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main([str(tmp_path / "missing"), "-o", str(tmp_path / "out")]) == 2
-    assert "源目录不存在" in capsys.readouterr().err
+    assert "source directory not found" in capsys.readouterr().err
+
+
+def test_cli_requires_input_directory(capsys: pytest.CaptureFixture[str]) -> None:
+    # 不内置任何语料目录：输入目录必须由调用方显式指定
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main([])
+
+    assert excinfo.value.code == 2
+    assert "required: input" in capsys.readouterr().err
 
 
 def test_cli_invalid_sizes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     source = make_tree(tmp_path)
 
     assert cli.main([str(source), "-o", str(tmp_path / "out"), "--max-chars", "0"]) == 2
-    assert "错误" in capsys.readouterr().err
+    assert "error:" in capsys.readouterr().err
 
 
 def test_cli_verify_passes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

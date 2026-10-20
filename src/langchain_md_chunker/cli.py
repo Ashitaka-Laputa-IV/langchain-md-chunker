@@ -15,40 +15,48 @@ from .storage import build_manifest, write_chunks
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="chunk",
-        description="将 markdown/MDX 文档切分为带字符偏移元数据的 chunk，并写入本地 JSONL。",
+        description="Split markdown/MDX documents into chunks with source offsets.",
     )
-    parser.add_argument(
-        "input",
-        nargs="?",
-        default="data/langchain-docs",
-        help="源文档目录（默认 data/langchain-docs）",
-    )
+    parser.add_argument("input", help="source directory to split")
     parser.add_argument(
         "-o",
         "--output",
         default="data/chunks",
-        help="chunk 输出目录（默认 data/chunks）",
+        help="output directory for the chunk store (default: data/chunks)",
     )
-    parser.add_argument("--max-chars", type=int, default=1500, help="单个 chunk 的目标上限字符数")
+    parser.add_argument(
+        "--max-chars",
+        type=int,
+        default=1500,
+        help="soft upper bound of one chunk in characters (default: 1500)",
+    )
     parser.add_argument(
         "--include-headings",
         action="store_true",
-        help="在 chunk 的 content 前拼接所属标题路径（# A / ## B / ### C）",
+        help="prepend the section heading path (# A / ## B) to chunk content",
     )
     parser.add_argument(
         "-p",
         "--pattern",
         dest="patterns",
         action="append",
-        help="文件匹配模式，可重复（默认 *.md 与 *.mdx）",
+        help="file pattern, repeatable (default: *.md and *.mdx)",
     )
     parser.add_argument(
         "--verify",
         action="store_true",
-        help="写盘前重新读取源文件，校验每个 chunk 的偏移切片",
+        help="re-read the sources and verify every chunk offset before writing",
     )
-    parser.add_argument("--quiet", action="store_true", help="只输出错误信息")
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="only print errors and warnings",
+    )
     return parser
+
+
+def _count(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
 
     source = Path(args.input)
     if not source.is_dir():
-        print(f"错误：源目录不存在 {source}", file=sys.stderr)
+        print(f"error: source directory not found: {source}", file=sys.stderr)
         return 2
 
     try:
@@ -64,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             max_chars=args.max_chars, include_headings=args.include_headings
         )
     except ValueError as exc:
-        print(f"错误：{exc}", file=sys.stderr)
+        print(f"error: {exc}", file=sys.stderr)
         return 2
 
     started = time.perf_counter()
@@ -73,12 +81,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         chunks = chunker.split_directory(source, patterns=patterns)
     except (OSError, UnicodeDecodeError) as exc:
-        print(f"错误：读取源文件失败（{exc}）", file=sys.stderr)
+        print(f"error: failed to read source files: {exc}", file=sys.stderr)
         return 1
 
     if not chunks:
         print(
-            f"警告：{source} 下没有匹配 {', '.join(patterns)} 的文件，输出为空索引",
+            f"warning: no files matched {', '.join(patterns)} under {source}; "
+            "writing an empty index",
             file=sys.stderr,
         )
 
@@ -86,25 +95,26 @@ def main(argv: list[str] | None = None) -> int:
         problems = verify_chunks(chunks, source)
         if problems:
             for problem in problems:
-                print(f"错误：{problem}", file=sys.stderr)
+                print(f"error: {problem}", file=sys.stderr)
             return 1
 
     manifest = build_manifest(chunks, source_root=source, config=config)
     try:
         chunks_path, manifest_path = write_chunks(chunks, args.output, manifest=manifest)
     except OSError as exc:
-        print(f"错误：写入 {args.output} 失败（{exc}）", file=sys.stderr)
+        print(f"error: failed to write {args.output}: {exc}", file=sys.stderr)
         return 1
     elapsed = time.perf_counter() - started
 
     if not args.quiet:
         print(
-            f"{manifest['doc_count']} 篇文档 -> {manifest['chunk_count']} 个 chunk "
-            f"（平均 {manifest['chunk_chars_avg']} 字符，"
-            f"最大 {manifest['chunk_chars_max']}），耗时 {elapsed:.2f}s"
+            f"{_count(manifest['doc_count'], 'document')} -> "
+            f"{_count(manifest['chunk_count'], 'chunk')} "
+            f"(avg {manifest['chunk_chars_avg']} chars, "
+            f"max {manifest['chunk_chars_max']}), {elapsed:.2f}s"
         )
-        print(f"chunk: {chunks_path}")
-        print(f"清单: {manifest_path}")
+        print(f"chunks  : {chunks_path}")
+        print(f"manifest: {manifest_path}")
     return 0
 
 

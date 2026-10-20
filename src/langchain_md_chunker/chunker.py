@@ -126,14 +126,14 @@ def verify_chunks(chunks: Iterable[Chunk], root: str | Path) -> list[str]:
                 texts[chunk.doc] = (base / chunk.doc).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 unreadable.add(chunk.doc)
-                problems.append(f"{chunk.doc}: 无法读取源文件（{type(exc).__name__}）")
+                problems.append(f"{chunk.doc}: cannot read source file ({type(exc).__name__})")
                 continue
 
         text = texts[chunk.doc]
         if not 0 <= chunk.start < chunk.end <= len(text):
-            problems.append(f"{chunk.id} {chunk.doc}: 偏移超出文件长度")
+            problems.append(f"{chunk.id} {chunk.doc}: offsets out of range")
         elif text[chunk.start : chunk.end] != chunk.text:
-            problems.append(f"{chunk.id} {chunk.doc}@{chunk.start}:{chunk.end} 偏移不匹配")
+            problems.append(f"{chunk.id} {chunk.doc}@{chunk.start}:{chunk.end}: slice mismatch")
     return problems
 
 
