@@ -42,6 +42,8 @@ data/chunks/
 └── manifest.json   # 源目录、配置、统计信息
 ```
 
+两个文件都是“临时文件 + 原子替换”写入：切分时刷新演示页面，不会读到写了一半的索引。
+
 `data/langchain-docs/` 与 `data/chunks/` 都在 `.gitignore` 中：语料和派生产物可随时重建，不入库。
 
 ## 数据格式
@@ -83,7 +85,7 @@ data/chunks/
 2. **分节**：按标题层级构造标题栈，每个 chunk 归属唯一一节，并带上该节标题路径。
 3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。
 4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；代码/组件可能因此被切开，但偏移依然精确。
-5. **丢弃**：`skip_kinds`（frontmatter / export）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。
+5. **丢弃**：`skip_kinds`（frontmatter / export）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB），并以标题/围栏为安全边界，绝不会吞掉正文。
 
 **已知限制**：标题行会与正文首块绑定；若正文是单个不可拆的巨型块（超长单行代码、大组件），该 chunk 可能超过 `max_chars`。默认语料中此类情况约占 0.1%。
 
@@ -150,14 +152,15 @@ tests/
 ├── test_chunker.py     # 文件/目录 API、编码（Unicode、CRLF）、校验、幂等
 ├── test_storage.py     # JSONL / manifest 往返
 ├── test_cli.py         # 命令行端到端与退出码
-└── test_package.py     # 包入口与公开 API
+├── test_package.py     # 包入口与公开 API
+└── test_demo.py        # 演示服务的数据装载、重载容错与路径安全
 data/download_docs.py
 ```
 
 ## 测试
 
 ```bash
-uv run pytest                       # 62 项，秒级
+uv run pytest                       # 78 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 ```
 
@@ -170,7 +173,7 @@ uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 - Unicode（非 BMP 字符）、CRLF 文件的偏移按码点而非字节；
 - 文件/目录 API 的 `doc` 路径、排序稳定性与 `verify_chunks` 的负例；
 - CLI 退出码、`--verify` 失败、`--max-chars`/`-p` 生效；
-- 语料存在时对全量 4500+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
+- 语料存在时对全量 4400+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
 
 ## 版权
 
