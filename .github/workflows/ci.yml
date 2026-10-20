@@ -30,4 +30,4 @@ jobs:
         run: uv run ruff check src demo tests
 
       - name: Test
-        run: uv run pytest -q --cov --cov-report=term
+        run: uv run pytest -q --cov --cov-report=term --cov-fail-under=99

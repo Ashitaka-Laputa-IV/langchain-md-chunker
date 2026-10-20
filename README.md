@@ -317,7 +317,7 @@ uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
 
-当前覆盖率：核心包 100% 行 / 100% 分支（`uv run pytest --cov` 可复现）。
+当前覆盖率：含语料时核心包 100% 行 / 100% 分支（`uv run pytest --cov` 可复现）；CI 无语料时门禁为 ≥99%。
 
 测试关注的是**不变量**而不是实现细节：
 

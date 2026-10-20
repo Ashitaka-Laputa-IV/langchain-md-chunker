@@ -25,7 +25,7 @@ jobs:
         run: uv run ruff check src demo tests
 
       - name: Test and coverage gate
-        run: uv run pytest -q --cov --cov-report=term
+        run: uv run pytest -q --cov --cov-report=term --cov-fail-under=99
 
   build:
     needs: test
