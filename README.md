@@ -201,8 +201,9 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 95 项，秒级
+uv run pytest                       # 101 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
+uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
 
 当前覆盖率：核心包 100% 行 / 100% 分支（`uv run pytest --cov` 可复现）。
