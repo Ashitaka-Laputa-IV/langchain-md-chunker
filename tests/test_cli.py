@@ -68,6 +68,17 @@ def test_cli_pattern_option(tmp_path: Path) -> None:
     assert all('"page.mdx"' in line for line in lines)
 
 
+def test_cli_warns_when_pattern_matches_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = make_tree(tmp_path)
+
+    assert cli.main([str(source), "-o", str(tmp_path / "out"), "-p", "*.rst"]) == 0
+
+    assert "没有匹配" in capsys.readouterr().err
+    assert chunk_count(tmp_path / "out") == 0
+
+
 def test_cli_missing_input(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main([str(tmp_path / "missing"), "-o", str(tmp_path / "out")]) == 2
     assert "源目录不存在" in capsys.readouterr().err

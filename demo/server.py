@@ -63,27 +63,38 @@ class ChunkStore:
             raise FileNotFoundError(f"未找到 {self.dir / 'chunks.jsonl'}")
         if not force and signature == self._signature:
             return
-        self._signature = signature
 
         manifest_path = self.dir / "manifest.json"
-        if manifest_path.is_file():
-            self.manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        chunks: list[dict[str, Any]] = []
+        docs: dict[str, dict[str, int]] = {}
+        try:
+            manifest = (
+                json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest_path.is_file()
+                else {}
+            )
+            with (self.dir / "chunks.jsonl").open(encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    raw = json.loads(line)
+                    text = raw.pop("text", "")
+                    raw["preview"] = re.sub(r"\s+", " ", text).strip()[:PREVIEW_CHARS]
+                    chunks.append(raw)
+                    doc = docs.setdefault(raw["doc"], {"chunks": 0, "chars": 0})
+                    doc["chunks"] += 1
+                    doc["chars"] += int(raw.get("chars", 0))
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+            # A half-written store (or a file replaced mid-read): keep serving the
+            # previous snapshot and retry on the next request.
+            self._signature = None
+            return
 
-        self.chunks = []
-        self.docs = {}
-        with (self.dir / "chunks.jsonl").open(encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                raw = json.loads(line)
-                text = raw.pop("text", "")
-                raw["preview"] = re.sub(r"\s+", " ", text).strip()[:PREVIEW_CHARS]
-                self.chunks.append(raw)
-                doc = self.docs.setdefault(raw["doc"], {"chunks": 0, "chars": 0})
-                doc["chunks"] += 1
-                doc["chars"] += int(raw.get("chars", 0))
-
+        self._signature = signature
+        self.manifest = manifest
+        self.chunks = chunks
+        self.docs = docs
         self.source_root = self._resolve_source_root()
 
     def _resolve_source_root(self) -> pathlib.Path:

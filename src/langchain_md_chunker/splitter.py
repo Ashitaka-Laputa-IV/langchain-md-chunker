@@ -100,7 +100,7 @@ def parse_blocks(text: str) -> list[Block]:
     blocks: list[Block] = []
     index = 0
 
-    if lines and lines[0].text.strip() == "---":
+    if lines and lines[0].text.strip().lstrip("\ufeff") == "---":
         close = 1
         while close < total and lines[close].text.strip() not in {"---", "..."}:
             close += 1
@@ -110,6 +110,10 @@ def parse_blocks(text: str) -> list[Block]:
 
     while index < total:
         line = lines[index]
+        if line.start == 0 and line.text.startswith("\ufeff"):
+            # A UTF-8 BOM is not part of the content: ignore it for parsing but
+            # keep offsets anchored to the raw file (the BOM is simply skipped).
+            line = _Line(line.no, line.start + 1, line.end, line.text[1:])
         source = line.text
 
         if not source.strip():
@@ -137,8 +141,14 @@ def parse_blocks(text: str) -> list[Block]:
 
         if EXPORT_RE.match(source):
             end = index
-            while end + 1 < total and lines[end + 1].text.strip():
+            balance = source.count("{") - source.count("}")
+            while balance > 0 and end + 1 < total:
+                following = lines[end + 1].text
+                # Never let an unclosed export swallow a new markdown block.
+                if HEADING_RE.match(following) or FENCE_RE.match(following):
+                    break
                 end += 1
+                balance += following.count("{") - following.count("}")
             blocks.append(Block("export", line.start, lines[end].end))
             index = end + 1
             continue
@@ -225,12 +235,28 @@ def _read_fence(
     return len(lines)
 
 
-def _find_mdx_close(lines: list[_Line], index: int, name: str, limit: int = 400) -> int | None:
+INNER_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>.*)$")
+
+
+def _closes_fence(line: str, fence: str) -> bool:
+    match = INNER_FENCE_RE.match(line)
+    if match is None:
+        return False
+    candidate = match.group("fence")
+    return (
+        candidate[0] == fence[0]
+        and len(candidate) >= len(fence)
+        and not match.group("info").strip()
+    )
+
+
+def _find_mdx_close(lines: list[_Line], index: int, name: str) -> int | None:
     """Locate the closing tag of an MDX component, or ``None`` if it is not a block.
 
-    A component without a closing tag (stray inline HTML) falls back to being
-    parsed as a paragraph. Scanning also stops at the next heading so a broken
-    tag can never swallow the rest of the document.
+    Fenced code blocks are skipped while counting nesting depth, otherwise a code
+    sample containing ``<Tabs>`` would corrupt the depth. A component without a
+    closing tag (stray inline HTML) falls back to being parsed as a paragraph, so
+    a broken tag can never swallow the rest of the document.
     """
     source = lines[index].text
     close_tag = f"</{name}"
@@ -238,21 +264,35 @@ def _find_mdx_close(lines: list[_Line], index: int, name: str, limit: int = 400)
         return index
 
     open_re = re.compile(rf"<{re.escape(name)}(?:[ \t/>]|$)")
-    stop = min(len(lines), index + limit)
     depth = 1
+    fence: str | None = None
     cursor = index + 1
-    while cursor < stop:
+
+    while cursor < len(lines):
         current = lines[cursor].text
-        # Nested components are usually indented, so match the tag after lstripping.
-        if open_re.match(current.lstrip()):
+
+        if fence is not None:
+            if _closes_fence(current, fence):
+                fence = None
+            cursor += 1
+            continue
+
+        opening = INNER_FENCE_RE.match(current)
+        if opening is not None:
+            fence = opening.group("fence")
+            cursor += 1
+            continue
+
+        # Nested components are usually indented, so match the tag after trimming.
+        trimmed = current.strip()
+        if open_re.match(trimmed) and not trimmed.endswith("/>"):
             depth += 1
-        if close_tag in current:
+        if close_tag in trimmed:
             depth -= 1
             if depth <= 0:
                 return cursor
-        elif HEADING_RE.match(current) and not current.startswith(("  ", "\t")):
-            return None
         cursor += 1
+
     return None
 
 

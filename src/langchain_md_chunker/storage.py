@@ -12,9 +12,11 @@ line by line without materialising the whole corpus.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Callable, Iterable, Sequence, TextIO
 
 from .models import Chunk, ChunkConfig
 
@@ -23,27 +25,48 @@ MANIFEST_FILE = "manifest.json"
 FORMAT_VERSION = 1
 
 
+def _atomic_write(path: Path, writer: Callable[[TextIO], None]) -> None:
+    """Write via a sibling temp file + ``os.replace`` so readers never see half a file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            writer(handle)
+        os.replace(temp_name, path)
+    except BaseException:
+        Path(temp_name).unlink(missing_ok=True)
+        raise
+
+
 def write_chunks(
     chunks: Iterable[Chunk],
     out_dir: str | Path,
     *,
     manifest: dict[str, Any] | None = None,
 ) -> tuple[Path, Path]:
-    """Write chunks (and optionally a manifest) to ``out_dir``."""
+    """Write chunks (and optionally a manifest) to ``out_dir``.
+
+    Files are replaced atomically: a concurrent reader (the demo server) either
+    sees the previous store or the new one, never a truncated file.
+    """
     directory = Path(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
 
     chunks_path = directory / CHUNKS_FILE
-    with chunks_path.open("w", encoding="utf-8", newline="\n") as handle:
+
+    def write_jsonl(handle: TextIO) -> None:
         for chunk in chunks:
             handle.write(json.dumps(chunk.to_dict(), ensure_ascii=False))
             handle.write("\n")
 
+    _atomic_write(chunks_path, write_jsonl)
+
     manifest_path = directory / MANIFEST_FILE
     if manifest is not None:
-        manifest_path.write_text(
-            json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
+        payload = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+        _atomic_write(manifest_path, lambda handle: handle.write(payload))
     return chunks_path, manifest_path
 
 

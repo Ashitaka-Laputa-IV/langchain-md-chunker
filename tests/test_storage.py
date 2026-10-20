@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from langchain_md_chunker import (
     CHUNKS_FILE,
     MANIFEST_FILE,
@@ -53,6 +55,22 @@ def test_jsonl_is_one_object_per_line_and_utf8(tmp_path: Path) -> None:
         payload = json.loads(line)
         assert payload["doc"] == "u.md"
         assert payload["text"] == text[payload["start"] : payload["end"]]
+
+
+def test_write_is_atomic(tmp_path: Path) -> None:
+    write_chunks(make_chunks(), tmp_path, manifest={"k": 1})
+    before = (tmp_path / CHUNKS_FILE).read_text(encoding="utf-8")
+    assert list(tmp_path.glob("*.tmp")) == []
+
+    class Boom:
+        def to_dict(self) -> dict:
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        write_chunks([Boom()], tmp_path)  # type: ignore[list-item]
+
+    assert (tmp_path / CHUNKS_FILE).read_text(encoding="utf-8") == before
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_read_chunks_ignores_blank_lines(tmp_path: Path) -> None:

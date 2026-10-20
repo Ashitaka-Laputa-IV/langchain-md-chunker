@@ -62,7 +62,14 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.perf_counter()
     chunker = Chunker(config)
-    chunks = chunker.split_directory(source, patterns=args.patterns or DEFAULT_PATTERNS)
+    patterns = args.patterns or DEFAULT_PATTERNS
+    chunks = chunker.split_directory(source, patterns=patterns)
+
+    if not chunks:
+        print(
+            f"警告：{source} 下没有匹配 {', '.join(patterns)} 的文件，输出为空索引",
+            file=sys.stderr,
+        )
 
     if args.verify:
         problems = verify_chunks(chunks, source)

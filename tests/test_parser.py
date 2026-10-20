@@ -118,6 +118,85 @@ def test_unclosed_frontmatter_is_not_a_block() -> None:
     assert any(block.kind == "heading" for block in blocks)
 
 
+def test_utf8_bom_is_ignored_for_parsing() -> None:
+    text = "\ufeff# Title\n\nbody\n"
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "heading"
+    assert blocks[0].title == "Title"
+    assert blocks[0].start == 1, "BOM 不应计入块起点"
+    assert text[blocks[0].start : blocks[0].end] == "# Title"
+
+
+def test_bom_with_frontmatter() -> None:
+    text = "\ufeff---\ntitle: x\n---\n\n# T\n\nbody\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks][:2] == ["frontmatter", "heading"]
+
+
+def test_export_block_stops_at_heading() -> None:
+    text = "# T\n\nexport const x = 1;\n# Next\n\nbody text\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["heading", "export", "heading", "para"]
+    assert text[blocks[2].start : blocks[2].end] == "# Next"
+
+
+def test_export_block_continues_while_braces_are_open() -> None:
+    text = (
+        "export const X = () => {\n  const a = 1;\n\n  return a;\n};\n\n# T\n\nbody\n"
+    )
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["export", "heading", "para"]
+    assert "return a;" in text[blocks[0].start : blocks[0].end]
+    assert text[blocks[1].start : blocks[1].end] == "# T"
+
+
+def test_unclosed_export_stops_at_heading() -> None:
+    text = "export const Broken = () => {\n  const a = 1;\n# Heading\n\nbody\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["export", "heading", "para"]
+    assert text[blocks[1].start : blocks[1].end] == "# Heading"
+
+
+def test_export_at_end_of_file() -> None:
+    assert [block.kind for block in parse_blocks("export const x = 1;")] == ["export"]
+
+
+def test_tag_inside_code_fence_does_not_break_component() -> None:
+    text = (
+        '<Tabs>\n  <Tab title="a">\n    ```md\n    <Tabs>\n    ```\n  </Tab>\n</Tabs>\n'
+        "\n# After\n\ntail\n"
+    )
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "mdx"
+    assert text[blocks[0].start : blocks[0].end].endswith("</Tabs>")
+    assert [block.kind for block in blocks[1:]] == ["heading", "para"]
+
+
+def test_component_may_contain_headings() -> None:
+    text = '<Accordion title="a">\n  ### Sub heading\n\n  body\n</Accordion>\n\nafter\n'
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "mdx"
+    assert text[blocks[0].start : blocks[0].end].endswith("</Accordion>")
+    assert text[blocks[1].start : blocks[1].end] == "after"
+
+
+def test_long_component_is_still_one_block() -> None:
+    inner = "\n".join(f"    line {index}" for index in range(500))
+    text = f'<Tabs>\n  <Tab title="big">\n{inner}\n  </Tab>\n</Tabs>\n\n# After\n\ntail\n'
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "mdx"
+    assert text[blocks[0].start : blocks[0].end].endswith("</Tabs>")
+    assert [block.kind for block in blocks[1:]] == ["heading", "para"]
+
+
 def test_single_line_document_without_trailing_newline() -> None:
     assert [block.kind for block in parse_blocks("just one paragraph")] == ["para"]
     assert [block.kind for block in parse_blocks("> just one quote")] == ["quote"]

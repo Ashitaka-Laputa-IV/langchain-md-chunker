@@ -87,10 +87,10 @@ def verify_chunks(chunks: Iterable[Chunk], root: str | Path) -> list[str]:
         if chunk.doc not in cache:
             cache[chunk.doc] = (base / chunk.doc).read_text(encoding="utf-8")
         text = cache[chunk.doc]
-        if text[chunk.start : chunk.end] != chunk.text:
-            problems.append(f"{chunk.id} {chunk.doc}@{chunk.start}:{chunk.end} 偏移不匹配")
-        elif chunk.end > len(text):
+        if not 0 <= chunk.start < chunk.end <= len(text):
             problems.append(f"{chunk.id} {chunk.doc}: 偏移超出文件长度")
+        elif text[chunk.start : chunk.end] != chunk.text:
+            problems.append(f"{chunk.id} {chunk.doc}@{chunk.start}:{chunk.end} 偏移不匹配")
     return problems
 
 
