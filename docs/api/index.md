@@ -1,6 +1,6 @@
 # API 参考
 
-`langchain-md-chunker` v0.3.0。把 markdown / MDX 文档切成带**源文件字符偏移**的 chunk，并可持久化为 JSONL。
+`langchain-md-chunker` v0.4.0。把 markdown / MDX 文档切成带**源文件字符偏移**的 chunk，并可持久化为 JSONL。
 
 本文档只覆盖**公开 API**；内部实现不在兼容性承诺内。纯 Markdown，可直接在 GitHub / 编辑器里阅读。
 
@@ -70,9 +70,9 @@ __version__  build_manifest  langchain_docs  read_chunks  read_manifest
 to_langchain_documents  verify_chunks  write_chunks
 ```
 
-其中 `__version__` 是包版本号（当前 `0.3.0`）。
+其中 `__version__` 是包版本号（当前 `0.4.0`）。
 
-- `Chunker` 是唯一入口，`split_text` / `split_file` / `split_directory` 三个方法覆盖内存、单文件、目录。
+- `Chunker` 是唯一入口，`split_text` / `split_file` / `split_directory` / `iter_directory` 覆盖内存、单文件、目录（列表或流式）。
 - 配置、预设、模型、存储、校验、CLI 的公开名字见各页顶部的 `__all__` 说明。
 - 以 `_` 开头的名字（如 `_build_units`、`_find_mdx_close`）属于内部实现，可能随时调整。
 
@@ -94,8 +94,9 @@ to_langchain_documents  verify_chunks  write_chunks
    JavaScript 需先 `Array.from(text)` 再切片。
 3. **行号 1-based、闭区间**：`start_line`/`end_line` 指向 `text` 在源文件中的行范围。
 
-`Chunk.content` 是唯一可能不等于 `text` 的字段：开启 `include_headings` 后会加上标题路径，详见
-[models.md](models.md) 与 [config.md](config.md)。
+`Chunk.content` 是唯一可能不等于 `text` 的字段：它可能加上标题路径（`include_headings`）以及
+分片包装（补出的围栏、重复表头、MDX 组件注释）。回原文定位请始终使用 `text` 与 `start/end`，
+详见 [models.md](models.md) 与 [config.md](config.md)。
 
 ## 另见
 

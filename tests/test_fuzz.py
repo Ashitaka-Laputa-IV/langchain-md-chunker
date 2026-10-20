@@ -98,9 +98,9 @@ def test_include_headings_only_prepends_heading_lines(max_chars: int) -> None:
     for _ in range(40):
         text = make_doc(rng)
         for chunk in Chunker(config).split_text(text):
-            assert chunk.content.endswith(chunk.text)
-            prefix = chunk.content[: len(chunk.content) - len(chunk.text)]
-            if prefix:
-                assert prefix.endswith("\n\n")
-                for line in prefix.rstrip("\n").split("\n"):
-                    assert line.startswith("#")
+            # content 只会在 text 前后增加内容（标题、围栏、表头、MDX 注释）
+            assert chunk.text in chunk.content
+            before, _, after = chunk.content.partition(chunk.text)
+            for line in before.rstrip("\n").split("\n"):
+                assert not line.strip() or line.startswith(("#", "```", "~~~", "|", "{/*"))
+            assert after == "" or after.startswith(("\n```", "\n~~~", "\n{/*"))

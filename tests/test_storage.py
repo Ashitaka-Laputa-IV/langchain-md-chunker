@@ -147,3 +147,14 @@ def test_chunk_dict_roundtrip() -> None:
     assert restored == chunk
     assert restored.headings == chunk.headings
     assert restored.chars == len(restored.text)
+
+
+def test_manifest_records_the_full_config(tmp_path: Path) -> None:
+    config = ChunkConfig(min_chars=50, id_strategy="content")
+    chunks = Chunker(config).split_text("# T\n\nbody\n", doc="a.md")
+
+    manifest = build_manifest(chunks, source_root=tmp_path, config=config)
+
+    assert manifest["config"]["min_chars"] == 50
+    assert manifest["config"]["merge_small_sections"] is True
+    assert manifest["config"]["id_strategy"] == "content"

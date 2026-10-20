@@ -14,7 +14,8 @@ API 参考见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchai
 - **MDX 感知**：跳过 frontmatter 与 `export const ...` 代码块；把 `<Tabs>`、`<CodeGroup>`、`<Accordion>` 等组件当作整体；代码围栏不会被腰斩。
 - **标题感知**：按标题层级分节，chunk 携带该节的标题路径（如 `LangChain > Agents > Middleware`）作为上下文。
 - **标题可写入正文**（可选）：`--include-headings` 会把标题路径按原层级拼进 `content`，更适合 embedding；`text` 仍保持精确切片。
-- **可调参数**：目标长度、要丢弃的块类型/样板前缀均可配置。
+- **分片语义完整**：超长代码 / 表格 / MDX 组件被切开后，`content` 会自动补回围栏、重复表头、标注组件名，单个片段可以直接拿去 embedding。
+- **可调参数**：目标长度、小节省合并、id 策略、要丢弃的块类型/样板前缀均可配置；目录读取支持指定编码与跳过坏文件。
 
 ## 快速开始
 
@@ -36,7 +37,10 @@ uv run python demo/server.py                   # 打开 http://127.0.0.1:8000 �
 ## 切分命令
 
 ```bash
-uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-docs] [--include-headings] [--verify] [--quiet]
+uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-docs] \
+  [--include-headings] [--min-chars 0] [--no-merge-small-sections] \
+  [--id-strategy location|content] [--encoding utf-8] [--on-error raise|skip] \
+  [--verify] [--quiet]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -47,6 +51,11 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
 | `-p, --pattern` | `*.md`, `*.mdx`, `*.MD`, `*.MDX` | 文件匹配模式，可重复 |
 | `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
+| `--min-chars` | `0` | 同一父节下的小节合并阈值；`0` 关闭 |
+| `--no-merge-small-sections` | 关闭 | 即使给了 `--min-chars` 也保留小节边界 |
+| `--id-strategy` | `location` | `location`（路径+偏移）或 `content`（内容哈希） |
+| `--encoding` | `utf-8` | 源文件读取编码 |
+| `--on-error` | `raise` | `skip` 时跳过不可读 / 解码失败的文件 |
 | `--verify` | 关闭 | 写盘前回读源文件，逐条校验偏移 |
 | `--quiet` | 关闭 | 只输出错误与警告 |
 
@@ -80,7 +89,7 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 
 ```json
 {
-  "id": "c32352242f27",
+  "id": "c32352242f276a1b",
   "doc": "oss/python/concepts/context.md",
   "start": 181,
   "end": 1541,
@@ -98,7 +107,7 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 
 | 字段 | 说明 |
 | --- | --- |
-| `id` | 由 `doc + start + end` 派生的稳定 ID |
+| `id` | `c` + 16 位十六进制。默认由 `doc + start + end` 派生；`id_strategy="content"` 时由 `content` 派生 |
 | `doc` | 相对 `manifest.source_root` 的源文件路径 |
 | `start` / `end` | 半开区间 `[start, end)`，单位是 **Unicode 码点** |
 | `start_line` / `end_line` | 1-based 行号，闭区间 |
@@ -106,9 +115,13 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 | `headings` | 标题路径（由外到内） |
 | `context` | `headings` 用 ` > ` 拼接，可直接拼到 embedding 输入前 |
 | `text` | 原文切片，逐字符等于 `source[start:end]` |
-| `content` | 用于 embedding / 展示的文本：默认等于 `text`，开启 `include_headings` 后是“标题路径 + 空行 + text” |
+| `content` | 用于 embedding / 展示的文本：`text` 加上标题路径（可选）与分片包装（必要时） |
 | `kind` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx`；跨多种块时为 `mixed` |
 | `lang` | 当 chunk 全部来自同一个代码块时为其围栏语言（如 `python`），否则为空 |
+
+> `content` 中的标题、补出的围栏、重复的表头、MDX 组件注释都是**合成**的，不要拿它回原文定位；
+> 回溯原文请始终使用 `text` 与 `start/end`。`id_strategy="content"` 下，内容相同的 chunk
+> （例如多页共用的示例）会得到同一个 id，便于跨文档去重。
 
 > 偏移以码点计（Python `str` 下标）。JavaScript 字符串是 UTF-16，跨码点时需
 > `Array.from(text)` 后再切片——`demo/static/app.js` 已这样做。
@@ -140,9 +153,8 @@ content = "# 1\n## 2\n\n### 3\n\nxxxxx"
 
 - chunk 已经包含自身标题行时**不会重复**，只补祖先标题；
 - 层级按原文保留（`# A` 下直接 `### C` 就输出 `# A` + `### C`，不臆造层级）；
-- 空标题跳过；无标题的文档 `content == text`；
-- `start / end / chars / 行号` 始终描述 `text`（原文切片），`--max-chars` 也只约束原文长度；
-  实测语料上 `content` 平均比 `text` 多 43 字符（最大 137）。
+- 空标题跳过；无标题且未发生分片包装的文档 `content == text`；
+- `start / end / chars / 行号` 始终描述 `text`（原文切片），`--max-chars` 也只约束原文长度。
 
 ```bash
 uv run chunk data/langchain-docs --preset langchain-docs --include-headings --verify
@@ -150,21 +162,40 @@ uv run chunk data/langchain-docs --preset langchain-docs --include-headings --ve
 Chunker(ChunkConfig(include_headings=True))
 ```
 
+## 分片包装
+
+超长代码块 / 表格 / MDX 组件按行切开后，每个片段是独立的 chunk：它们不共享 chunk，
+因此 `content` 可以安全地补齐上下文（`text` 不变，仍是精确切片）：
+
+| 块类型 | 中间片段的 `content` |
+| --- | --- |
+| 代码 | 补上与原文一致的开围栏与闭围栏（如 ` ```python ` … ` ``` `） |
+| 表格 | 重复表头行与对齐行（首行 + `---` 分隔行） |
+| MDX | 首尾加组件名注释：`{/* <Tabs> */}` … `{/* </Tabs> */}` |
+
+```text
+text    = "print(42)"
+content = "```python\nprint(42)\n```"
+```
+
+片段之间不会互相吞并，所以每个 `content` 都是自洽的 Markdown 片段；代价是长代码/长组件会产生
+更多、更小的 chunk（可用 `min_chars` 合并普通小节，但不会合并同一块的两个片段）。
+
 ## 切分策略
 
 1. **分块**：逐行扫描，识别标题（ATX 与 Setext）、代码围栏（``` / ~~~）、表格、引用、MDX 组件、列表、段落、分隔线、frontmatter、`export` 块。
 2. **分节**：按标题层级构造标题栈，每个 chunk 归属唯一一节，并带上该节标题路径。
-3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。
-4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；代码/组件可能因此被切开，但偏移依然精确。
-5. **丢弃**：`skip_kinds`（frontmatter / export）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB），并以标题/围栏为安全边界，绝不会吞掉正文。
+3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。设置 `min_chars` 后，同一父节下、同一层级的相邻小节会先合并（不跨父节，且合并后仍不超 `max_chars`）；合并后的 chunk 采用第一个小节的标题路径，正文仍包含后续小节标题。
+4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；切出的片段在 `content` 中补围栏 / 表头 / 组件名（见上节）。
+5. **丢弃**：`skip_kinds`（frontmatter / export / import / MDX 注释）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB），并以标题/围栏为安全边界，绝不会吞掉正文。
 
 **已知限制与设计取舍**：
 
-- 标题行会与正文首块绑定；超长**代码块 / 表格 / MDX 组件**保持原子（按行拆分），chunk 可能超过 `max_chars`。超长单行**正文**会按句末标点 → 逗号 → 硬切回退。
+- 标题行会与正文首块绑定；超长块按行切分并在 `content` 中补齐语义。只有两种情况会超过 `max_chars`：单行本身超长（无法在不破坏内容的前提下再切），或为避免尾部分隔符单独成块而并入上一片段（只多出分隔符的几个字符，属软上限）。超长单行**正文**会按句末标点 → 逗号 → 硬切回退。
 - `max_chars` 按**字符**而非 token 计量：中英文密度不同，需要 token 预算时请按语料换算后调整。
 - 相邻 chunk **不重叠**：这是“偏移精确、可回溯”的刻意取舍；需要 overlap 的检索策略请在消费端处理。
 - 不支持 4 空格缩进代码块：文档中的缩进更常表示 MDX 组件或列表续行，误判代价高于收益；代码请使用围栏。
-- 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）；代码/表格被切分后，后续片段不含围栏或表头，可用 `kind` / `lang` 判断并补全。
+- 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）；若需要片段自带的围栏/表头，请使用 `content`（`text` 始终不含合成内容）。
 - `split_directory` 是单线程同步 IO；5 MB 语料约 0.5 s，更大规模建议按目录分片。
 - 偏移按 Unicode 码点；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
 
@@ -182,6 +213,20 @@ source = Path("data/langchain-docs", chunks[0].doc).read_text(encoding="utf-8")
 
 assert source[chunks[0].start : chunks[0].end] == chunks[0].text
 print(chunks[0].context, len(chunks))
+```
+
+其他常用选项：
+
+```python
+# 合并同一父节下的小节（不跨父节）
+Chunker(ChunkConfig(min_chars=200))
+
+# 内容寻址 id（相同内容跨文件共享 id）
+Chunker(ChunkConfig(id_strategy="content"))
+
+# 流式处理大语料；跳过无法解码的文件
+for chunk in Chunker().iter_directory("data/langchain-docs", encoding="utf-8", on_error="skip"):
+    index.add(chunk)
 ```
 
 持久化与读取：
@@ -219,7 +264,7 @@ uv run python demo/server.py --port 8000
 - 左侧按源文件顺序列出 `[序号] 预览`，支持按路径 / 标题 / 预览片段过滤；预览取自 `content`，开启 `--include-headings` 后可直接看到标题前缀；
 - 点击任意 `[序号]`，右侧直接渲染源文件并高亮该 chunk，自动滚动到高亮位置；
 - 顶部显示文档路径、字符偏移、行号、标题路径，可另开原始文件；
-- URL 形如 `http://127.0.0.1:8000/#c32352242f27`，可直接分享某个 chunk。
+- URL 形如 `http://127.0.0.1:8000/#c32352242f276a1b`，可直接分享某个 chunk。
 
 前端没有构建步骤（原生 ES modules + HTML/CSS），服务端只用标准库，不导入 chunker 包，因此不会污染核心。修改语料后重新 `uv run chunk data/langchain-docs`，服务会自动重载。
 
@@ -260,7 +305,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 160 项，秒级
+uv run pytest                       # 192 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
@@ -274,7 +319,7 @@ uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依�
 - Unicode（非 BMP 字符）、CRLF 文件的偏移按码点而非字节；
 - 文件/目录 API 的 `doc` 路径、排序稳定性与 `verify_chunks` 的负例；
 - CLI 退出码、`--verify` 失败、`--max-chars`/`-p` 生效；
-- 语料存在时对全量 4400+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
+- 语料存在时对全量 4700+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
 
 ## 发布
 

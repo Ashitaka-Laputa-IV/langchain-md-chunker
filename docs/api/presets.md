@@ -27,7 +27,14 @@ LangChain 官方文档每页都会出现的两块样板，没有检索价值：
 ## `langchain_docs`
 
 ```python
-def langchain_docs(*, max_chars: int = 1500, include_headings: bool = False) -> ChunkConfig
+def langchain_docs(
+    *,
+    max_chars: int = 1500,
+    include_headings: bool = False,
+    min_chars: int = 0,
+    merge_small_sections: bool = True,
+    id_strategy: str = "location",
+) -> ChunkConfig
 ```
 
 返回带 LangChain 文档样板的配置：
@@ -35,9 +42,11 @@ def langchain_docs(*, max_chars: int = 1500, include_headings: bool = False) -> 
 ```python
 ChunkConfig(
     max_chars=max_chars,
-    skip_kinds=("frontmatter", "export"),
     skip_prefixes=LANGCHAIN_DOCS_SKIP_PREFIXES,
     include_headings=include_headings,
+    min_chars=min_chars,
+    merge_small_sections=merge_small_sections,
+    id_strategy=id_strategy,
 )
 ```
 
@@ -45,6 +54,9 @@ ChunkConfig(
 | --- | --- | --- | --- |
 | `max_chars` | `int` | `1500` | 透传给 `ChunkConfig` |
 | `include_headings` | `bool` | `False` | 透传给 `ChunkConfig` |
+| `min_chars` | `int` | `0` | 透传给 `ChunkConfig` |
+| `merge_small_sections` | `bool` | `True` | 透传给 `ChunkConfig` |
+| `id_strategy` | `str` | `"location"` | 透传给 `ChunkConfig` |
 
 `skip_kinds` 与 `skip_prefixes` 不支持覆盖；需要自定义时直接构造 `ChunkConfig`。
 

@@ -7,7 +7,7 @@
 
 ```python
 from langchain_md_chunker import DEFAULT_PATTERNS, Chunker
-from langchain_md_chunker.chunker import IGNORED_DIRS
+from langchain_md_chunker.chunker import IGNORED_DIRS, ON_ERROR_MODES
 ```
 
 ## `DEFAULT_PATTERNS`
@@ -25,6 +25,14 @@ IGNORED_DIRS: frozenset[str] = frozenset({".git", ".venv", "node_modules", "buil
 ```
 
 `split_directory` 递归时不会进入这些目录（版本控制、虚拟环境、依赖与缓存目录），避免把仓库根目录当语料时误伤。
+
+## `ON_ERROR_MODES`
+
+```python
+ON_ERROR_MODES: tuple[str, ...] = ("raise", "skip")
+```
+
+`split_directory` / `iter_directory` 的 `on_error` 取值：`raise`（默认）遇到不可读文件立即抛出；`skip` 静默跳过该文件，继续处理其余文件。
 
 ## `Chunker`
 
@@ -62,15 +70,22 @@ assert chunks[0].doc == "page.md"
 ### `split_file`
 
 ```python
-def split_file(self, path: str | Path, *, root: str | Path | None = None) -> list[Chunk]
+def split_file(
+    self,
+    path: str | Path,
+    *,
+    root: str | Path | None = None,
+    encoding: str = "utf-8",
+) -> list[Chunk]
 ```
 
-读取一个 UTF-8 文件并切分。
+读取一个文件并切分。
 
 | 参数 | 说明 |
 | --- | --- |
 | `path` | 文件路径 |
 | `root` | `Chunk.doc` 的基准目录；默认取文件所在目录。文件不在 `root` 内时 `doc` 回退为文件名 |
+| `encoding` | 读取编码，默认 `utf-8` |
 
 ```python
 chunks = Chunker().split_file("data/langchain-docs/oss/python/learn.md", root="data/langchain-docs")
@@ -87,6 +102,9 @@ def split_directory(
     self,
     root: str | Path,
     patterns: Sequence[str] = DEFAULT_PATTERNS,
+    *,
+    encoding: str = "utf-8",
+    on_error: str = "raise",
 ) -> list[Chunk]
 ```
 
@@ -96,6 +114,8 @@ def split_directory(
 | --- | --- |
 | `root` | 源目录；不存在或不是目录时抛 `NotADirectoryError` |
 | `patterns` | glob 模式序列，可重复；同一文件只会被切分一次 |
+| `encoding` | 读取编码，默认 `utf-8` |
+| `on_error` | `"raise"`（默认）或 `"skip"`：跳过不可读/解码失败的文件 |
 
 遍历时会跳过 `IGNORED_DIRS`（`.git`、`.venv`、`node_modules` 等）；默认模式同时覆盖小写与大写后缀（`*.md` / `*.MD`）。
 
@@ -109,6 +129,27 @@ from langchain_md_chunker import Chunker, langchain_docs
 chunker = Chunker(langchain_docs())
 chunks = chunker.split_directory("data/langchain-docs")
 chunks = chunker.split_directory("data/langchain-docs", patterns=("*.md",))
+chunks = chunker.split_directory("data/langchain-docs", encoding="gb18030", on_error="skip")
+```
+
+### `iter_directory`
+
+```python
+def iter_directory(
+    self,
+    root: str | Path,
+    patterns: Sequence[str] = DEFAULT_PATTERNS,
+    *,
+    encoding: str = "utf-8",
+    on_error: str = "raise",
+) -> Iterator[Chunk]
+```
+
+与 `split_directory` 参数相同，但按文件流式产出 chunk，适合大语料：
+
+```python
+for chunk in Chunker().iter_directory("data/langchain-docs"):
+    index.add(chunk)
 ```
 
 ## 完整示例

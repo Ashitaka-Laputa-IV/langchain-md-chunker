@@ -5,6 +5,26 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
+### 新增
+
+- **分片语义包装**：超长代码块 / 表格 / MDX 组件被切开后，`Chunk.content` 自动补回围栏、重复表头、标注组件名（`{/* <Tabs> */}`）；`text` 仍是精确原文切片。
+- **内容寻址 id**：`ChunkConfig(id_strategy="content")` 用 `content` 的哈希生成 id，相同内容跨文件共享 id；两种策略都加宽为 `c` + 16 位十六进制。
+- **小节合并**：`min_chars` 合并同一父节、同一层级的相邻小节（不跨父节），`merge_small_sections=False` 可关闭。
+- **目录读取选项**：`split_directory` / `split_file` 新增 `encoding`；目录接口新增 `on_error="skip"`；新增流式迭代器 `Chunker.iter_directory`。
+- `to_langchain_documents` 的 metadata 增加 `kind` / `lang`。
+
+### 变更
+
+- 超长块切出的每个片段现在是独立 chunk（不再与相邻片段/正文合并），确保补出的围栏、表头与组件注释始终闭合。
+- chunk id 长度从 11 位十六进制加宽到 16 位；`location` 策略生成的 id 与 0.3.0 不兼容。
+- CLI 新增 `--min-chars`、`--no-merge-small-sections`、`--id-strategy`、`--encoding`、`--on-error`。
+
+### 文档
+
+- 修正“原子块不可拆”的措辞：超长块按行切分，只有单行超长或为了避免尾部分隔符单独成块时才略微超过 `max_chars`。
+
 ## [0.3.0] - 2026-10-20
 
 ### 修复
@@ -15,7 +35,7 @@
 
 ### 变更
 
-- 超长单行**正文**按句末标点 → 逗号 → 硬切回退切分；代码/表格/组件保持原子。
+- 超长单行**正文**按句末标点 → 逗号 → 硬切回退切分；代码/表格/组件按行切分（当时片段不带围栏/表头包装）。
 - `Chunk` 新增 `kind`（`para`/`code`/`table`/`list`/`quote`/`mdx`/`mixed`）与 `lang` 字段。
 - CLI 默认 `--preset generic`（不再默认套用某家文档站规则）；`INPUT` 支持单个文件。
 - `split_directory` 跳过 `.git`、`.venv`、`node_modules` 等目录，默认模式覆盖 `*.MD` / `*.MDX`。
@@ -58,7 +78,8 @@
 - `chunks.jsonl` 与 `manifest.json` 分别原子替换，不是跨文件事务。
 - 仅支持 Python 3.13+。
 
-[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/releases/tag/v0.1.0

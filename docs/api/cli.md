@@ -7,7 +7,9 @@ console script：`chunk`（等价入口 `langchain-md-chunker`），实现为 `l
 
 ```bash
 uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-docs]
-             [--include-headings] [-p PATTERN] [--verify] [--quiet]
+             [--include-headings] [--min-chars 0] [--no-merge-small-sections]
+             [--id-strategy location|content] [--encoding utf-8] [--on-error raise|skip]
+             [-p PATTERN] [--verify] [--quiet]
 ```
 
 ## 参数
@@ -19,6 +21,11 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 | `--max-chars` | `1500` | 单 chunk 软上限（原文字符数） |
 | `--preset` | `generic` | `generic` 不丢任何样板；`langchain-docs` 丢弃 LangChain 文档每页样板。见 [presets.md](presets.md) |
 | `--include-headings` | 关闭 | 把标题路径写入 `content`，见 [config.md](config.md) |
+| `--min-chars` | `0` | 同一父节下的小节合并阈值；`0` 关闭 |
+| `--no-merge-small-sections` | 关闭 | 即使设置了 `--min-chars` 也保留小节边界 |
+| `--id-strategy` | `location` | `location`（路径+偏移）或 `content`（内容哈希） |
+| `--encoding` | `utf-8` | 源文件读取编码 |
+| `--on-error` | `raise` | `skip` 时跳过不可读 / 解码失败的文件 |
 | `-p, --pattern` | `*.md`、`*.mdx`、`*.MD`、`*.MDX` | 文件匹配模式，可重复 |
 | `--verify` | 关闭 | 写盘前回读源文件校验偏移，见 [verify.md](verify.md) |
 | `--quiet` | 关闭 | 只输出错误与警告 |
@@ -34,8 +41,8 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 ## 输出
 
 ```text
-$ uv run chunk data/langchain-docs --verify
-180 documents -> 4461 chunks (avg 955.8 chars, max 6525), 0.54s
+$ uv run chunk data/langchain-docs --preset langchain-docs --verify
+180 documents -> 4811 chunks (avg 886.1 chars, max 6525), 0.55s
 chunks  : data/chunks/chunks.jsonl
 manifest: data/chunks/manifest.json
 ```
@@ -67,6 +74,12 @@ uv run chunk data/langchain-docs --preset langchain-docs --include-headings --ve
 
 # 只处理 mdx，且不打印进度
 uv run chunk data/langchain-docs -p '*.mdx' --quiet
+
+# 合并过短的小节 + 内容寻址 id
+uv run chunk data/langchain-docs --preset langchain-docs --min-chars 200 --id-strategy content
+
+# 混合编码语料：跳过无法解码的文件
+uv run chunk data/langchain-docs --encoding utf-8 --on-error skip
 ```
 
 ## Python 接口

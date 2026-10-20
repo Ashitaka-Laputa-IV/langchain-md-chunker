@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="chunk",
         description="Split markdown/MDX documents into chunks with source offsets.",
     )
-    parser.add_argument("input", help="source directory to split")
+    parser.add_argument("input", help="source directory or file to split")
     parser.add_argument(
         "-o",
         "--output",
@@ -44,6 +44,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="prepend the section heading path (# A / ## B) to chunk content",
     )
     parser.add_argument(
+        "--min-chars",
+        type=int,
+        default=0,
+        help="merge sibling sections smaller than this (0 disables merging)",
+    )
+    parser.add_argument(
+        "--no-merge-small-sections",
+        action="store_true",
+        help="keep every section separate even when --min-chars is set",
+    )
+    parser.add_argument(
+        "--id-strategy",
+        choices=("location", "content"),
+        default="location",
+        help="derive chunk ids from offsets (default) or from content",
+    )
+    parser.add_argument(
+        "--encoding",
+        default="utf-8",
+        help="encoding used to read source files (default: utf-8)",
+    )
+    parser.add_argument(
+        "--on-error",
+        choices=("raise", "skip"),
+        default="raise",
+        help="skip unreadable files instead of aborting (default: raise)",
+    )
+    parser.add_argument(
         "-p",
         "--pattern",
         dest="patterns",
@@ -65,9 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _build_config(args: argparse.Namespace) -> ChunkConfig:
     """Resolve the corpus preset into a concrete config."""
+    options = {
+        "max_chars": args.max_chars,
+        "include_headings": args.include_headings,
+        "min_chars": args.min_chars,
+        "merge_small_sections": not args.no_merge_small_sections,
+        "id_strategy": args.id_strategy,
+    }
     if args.preset == "langchain-docs":
-        return langchain_docs(max_chars=args.max_chars, include_headings=args.include_headings)
-    return ChunkConfig(max_chars=args.max_chars, include_headings=args.include_headings)
+        return langchain_docs(**options)
+    return ChunkConfig(**options)
 
 
 def _count(count: int, noun: str) -> str:
@@ -94,12 +129,19 @@ def main(argv: list[str] | None = None) -> int:
     root = source.parent if source.is_file() else source
     try:
         if source.is_file():
-            chunks = chunker.split_file(source, root=root)
+            chunks = chunker.split_file(source, root=root, encoding=args.encoding)
         else:
-            chunks = chunker.split_directory(source, patterns=patterns)
+            chunks = chunker.split_directory(
+                source,
+                patterns=patterns,
+                encoding=args.encoding,
+                on_error=args.on_error,
+            )
     except (OSError, UnicodeDecodeError) as exc:
-        print(f"error: failed to read source files: {exc}", file=sys.stderr)
-        return 1
+        if args.on_error != "skip":
+            print(f"error: failed to read source files: {exc}", file=sys.stderr)
+            return 1
+        chunks = []
 
     if not chunks:
         print(

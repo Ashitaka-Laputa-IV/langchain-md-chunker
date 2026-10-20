@@ -105,6 +105,9 @@ def build_manifest(
 | `config.skip_kinds` | 丢弃的块类型 |
 | `config.skip_prefixes` | 丢弃的样板前缀 |
 | `config.include_headings` | 是否把标题写入 `content` |
+| `config.min_chars` | 小节合并阈值（`0` 表示关闭） |
+| `config.merge_small_sections` | 是否允许合并小兄弟小节 |
+| `config.id_strategy` | `location` 或 `content` |
 | `doc_count` | 文档数 |
 | `chunk_count` | chunk 总数 |
 | `total_chars` | 所有 chunk 的原文长度之和 |
@@ -116,7 +119,7 @@ def build_manifest(
 
 ```json
 {
-  "id": "c32352242f27",
+  "id": "c32352242f276a1b",
   "doc": "oss/python/concepts/context.md",
   "start": 181,
   "end": 1541,
@@ -132,7 +135,8 @@ def build_manifest(
 }
 ```
 
-字段含义见 [models.md](models.md)。
+字段含义见 [models.md](models.md)。`content` 可能含合成内容（标题、补出的围栏、重复表头、MDX 注释），
+回原文定位请用 `text` 与 `start/end`。
 
 ## 读取示例
 

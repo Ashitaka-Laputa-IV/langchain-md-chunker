@@ -64,3 +64,12 @@ def test_text_mode_uses_exact_slice(fake_langchain: None) -> None:
 def test_invalid_page_content_is_rejected(fake_langchain: None) -> None:
     with pytest.raises(ValueError, match="page_content"):
         to_langchain_documents([], page_content="html")  # type: ignore[arg-type]
+
+
+def test_documents_carry_kind_and_language(fake_langchain: None) -> None:
+    chunks = Chunker().split_text("# T\n\n```python\nprint(1)\n```\n", doc="page.md")
+
+    metadata = to_langchain_documents(chunks)[0].metadata
+
+    assert metadata["kind"] == "code"
+    assert metadata["lang"] == "python"

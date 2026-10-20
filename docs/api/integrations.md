@@ -23,7 +23,7 @@ def to_langchain_documents(
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `chunks` | `Iterable[Chunk]` | — | `Chunker` 产出或 `read_chunks` 读回的 chunk |
-| `page_content` | `"content" \| "text"` | `"content"` | 用哪个字段作为文档正文：`content` 可带标题前缀，`text` 是原文精确切片 |
+| `page_content` | `"content" \| "text"` | `"content"` | 用哪个字段作为文档正文：`content` 含标题前缀与分片包装，`text` 是原文精确切片 |
 
 ### 依赖
 
@@ -51,6 +51,8 @@ ImportError: to_langchain_documents() requires langchain-core; install it with `
 | `chars` | 原文切片长度 |
 | `headings` | 标题路径（`list[str]`） |
 | `context` | 标题路径字符串，如 `A > B` |
+| `kind` | 主导块类型（`para` / `code` / `table` / `mdx` / `mixed` …） |
+| `lang` | 代码块语言，非代码为空字符串 |
 
 ### 示例
 

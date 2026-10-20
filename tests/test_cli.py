@@ -186,3 +186,70 @@ def test_cli_verify_failure_exits_nonzero(
     assert cli.main([str(source), "-o", str(tmp_path / "out"), "--verify"]) == 1
     assert "boom" in capsys.readouterr().err
     assert not (tmp_path / "out" / CHUNKS_FILE).exists()
+
+
+def test_cli_min_chars_merges_sibling_sections(tmp_path: Path) -> None:
+    source = tmp_path / "docs"
+    source.mkdir()
+    (source / "page.md").write_text(
+        "# Title\n\n## a\n\nsmall a\n\n## b\n\nsmall b\n", encoding="utf-8"
+    )
+
+    assert cli.main([str(source), "-o", str(tmp_path / "separate")]) == 0
+    assert cli.main([str(source), "-o", str(tmp_path / "merged"), "--min-chars", "100"]) == 0
+
+    assert chunk_count(tmp_path / "separate") == 2
+    assert chunk_count(tmp_path / "merged") == 1
+
+
+def test_cli_content_ids_are_shared_by_identical_chunks(tmp_path: Path) -> None:
+    source = tmp_path / "docs"
+    source.mkdir()
+    for name in ("a.md", "b.md"):
+        (source / name).write_text("# Same\n\nbody\n", encoding="utf-8")
+
+    assert cli.main([str(source), "-o", str(tmp_path / "out"), "--id-strategy", "content"]) == 0
+
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "out" / CHUNKS_FILE).read_text(encoding="utf-8").splitlines()
+    ]
+    assert len({record["id"] for record in records}) == 1
+
+
+def test_cli_on_error_skip_ignores_broken_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = make_tree(tmp_path)
+    (source / "broken.md").write_bytes(b"# T\n\n\xff\xfe\n")
+
+    assert cli.main([str(source), "-o", str(tmp_path / "out"), "--on-error", "skip"]) == 0
+
+    assert capsys.readouterr().err == ""
+    assert chunk_count(tmp_path / "out") == 1
+
+
+def test_cli_encoding_option(tmp_path: Path) -> None:
+    source = tmp_path / "docs"
+    source.mkdir()
+    (source / "latin.md").write_bytes("# T\n\ncafé\n".encode("latin-1"))
+
+    assert cli.main([str(source), "-o", str(tmp_path / "out"), "--encoding", "latin-1"]) == 0
+
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "out" / CHUNKS_FILE).read_text(encoding="utf-8").splitlines()
+    ]
+    assert "café" in records[0]["text"]
+
+
+def test_cli_on_error_skip_single_unreadable_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "broken.md"
+    target.write_bytes(b"# T\n\n\xff\xfe\n")
+
+    assert cli.main([str(target), "-o", str(tmp_path / "out"), "--on-error", "skip"]) == 0
+
+    assert "no files matched" in capsys.readouterr().err
+    assert chunk_count(tmp_path / "out") == 0

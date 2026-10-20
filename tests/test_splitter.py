@@ -225,9 +225,12 @@ def test_corpus_chunks_are_consistent(corpus_dir: Path, corpus_chunks) -> None:
 def test_corpus_chunk_sizes_are_reasonable(corpus_chunks) -> None:
     oversize = [chunk for chunk in corpus_chunks if chunk.chars > 1500]
 
-    # 只有“标题 + 单个不可拆块（超长代码行 / 大型 MDX 组件）”允许突破上限
+    # 允许两类软性超限：
+    # 1. 标题跟随一个不可拆块（超长单行代码）；
+    # 2. 为避免尾部分隔符单独成块，把只含分隔符的尾巴并入上一片段。
+    limit = 1500 + max(16, 1500 // 10)
     for chunk in oversize:
-        assert chunk.text.startswith("#") or "\n" not in chunk.text
+        assert chunk.chars <= limit or chunk.text.startswith("#") or "\n" not in chunk.text
     assert len(oversize) <= len(corpus_chunks) * 0.01
 
 
@@ -239,6 +242,8 @@ def test_split_text_handles_blank_input() -> None:
 def test_invalid_config_is_rejected() -> None:
     with pytest.raises(ValueError):
         ChunkConfig(max_chars=0)
+    with pytest.raises(ValueError):
+        ChunkConfig(max_chars=100, min_chars=200)
     with pytest.raises(ValueError):
         ChunkConfig(skip_prefixes=("  ",))
 
@@ -260,3 +265,191 @@ def test_skip_kinds_heading_keeps_body() -> None:
 
     assert [chunk.text for chunk in chunks] == ["body a", "body b"]
 
+
+
+def test_split_code_fragments_are_wrapped_in_fences() -> None:
+    body = "\n".join(f"print({index})" for index in range(60))
+    text = f"# T\n\n```python\n{body}\n```\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    assert len(chunks) > 2
+    assert all(chunk.kind == "code" and chunk.lang == "python" for chunk in chunks)
+    assert chunks[0].content.startswith("# T\n\n```python")
+    for chunk in chunks[1:]:
+        assert chunk.content.startswith("```python\n")
+    for chunk in chunks:
+        assert chunk.content.count("```python") == 1
+        assert chunk.content.count("```") % 2 == 0
+        assert chunk.content.endswith("```")
+        # 原文切片本身仍不包含补出来的围栏
+        assert chunk.text in chunk.content
+
+
+def test_split_table_fragments_repeat_the_header() -> None:
+    rows = "\n".join(f"| {index} | v{index} |" for index in range(40))
+    text = f"# T\n\n| a | b |\n| - | - |\n{rows}\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    assert len(chunks) > 2
+    assert all(chunk.kind == "table" for chunk in chunks)
+    for chunk in chunks:
+        assert chunk.content.count("| a | b |") == 1
+    assert chunks[0].content.startswith("# T\n\n| a | b |")
+    for chunk in chunks[1:]:
+        assert chunk.content.startswith("| a | b |\n| - | - |\n")
+
+
+def test_split_mdx_fragments_carry_the_component_name() -> None:
+    children = "\n".join(
+        f'  <Tab title="t{index}">\n'
+        + "\n".join(f"    line {row}" for row in range(10))
+        + "\n  </Tab>"
+        for index in range(5)
+    )
+    text = f"# T\n\n<Tabs>\n{children}\n</Tabs>\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=300)).split_text(text)
+
+    assert len(chunks) > 2
+    assert all(chunk.kind == "mdx" for chunk in chunks)
+    for chunk in chunks:
+        if "<Tabs>" not in chunk.text:
+            assert chunk.content.startswith("{/* <Tabs> */}\n")
+        if not chunk.text.rstrip().endswith("</Tabs>"):
+            assert chunk.content.endswith("{/* </Tabs> */}")
+
+
+def test_heading_stays_attached_to_a_wrapped_fragment() -> None:
+    body = "\n".join(f"print({index})" for index in range(60))
+    text = f"# T\n\n```python\n{body}\n```\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200, include_headings=True)).split_text(text)
+
+    assert len(chunks) > 1
+    assert chunks[0].content.startswith("# T\n\n```python")
+    assert chunks[1].content.startswith("# T\n\n```python\n")
+
+
+def test_min_chars_merges_siblings_under_the_same_parent() -> None:
+    text = (
+        "# A\n\n## a1\n\nshort one\n\n## a2\n\nshort two\n\n"
+        "# B\n\n## b1\n\nshort three\n"
+    )
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert len(chunks) == 2
+    assert chunks[0].headings == ("A", "a1")
+    assert "## a1" in chunks[0].text and "## a2" in chunks[0].text
+    # 不同父节（# A 与 # B）不合并
+    assert chunks[1].headings == ("B", "b1")
+    assert chunks[1].text == "## b1\n\nshort three"
+
+
+def test_merge_small_sections_can_be_disabled() -> None:
+    text = "# A\n\n## a1\n\nshort one\n\n## a2\n\nshort two\n"
+
+    chunks = Chunker(
+        ChunkConfig(min_chars=100, merge_small_sections=False)
+    ).split_text(text)
+
+    assert len(chunks) == 2
+
+
+def test_merge_respects_max_chars() -> None:
+    text = "## a1\n\n" + "x" * 80 + "\n\n## a2\n\n" + "y" * 80 + "\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=150, min_chars=100)).split_text(text)
+
+    assert len(chunks) == 2
+
+
+def test_merge_does_not_mix_heading_levels() -> None:
+    text = "# A\n\n## B\n\nsmall b\n\n### C\n\nsmall c\n"
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert [chunk.headings for chunk in chunks] == [("A", "B"), ("A", "B", "C")]
+
+
+def test_table_without_alignment_row_still_repeats_its_header() -> None:
+    rows = "\n".join(f"| {index} |" for index in range(40))
+    text = f"| a |\n{rows}\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    assert len(chunks) > 1
+    assert all(chunk.kind == "table" for chunk in chunks)
+    for chunk in chunks:
+        assert chunk.content.count("| a |") == 1
+
+
+def test_min_chars_ignores_skipped_blocks_when_measuring_sections() -> None:
+    text = "# A\n\n## a1\n\nexport const X = 1;\n\nbody one\n\n## a2\n\nbody two\n"
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert chunks
+    assert all("export const" not in chunk.text for chunk in chunks)
+
+
+def test_sections_at_or_above_min_chars_are_not_merged() -> None:
+    text = "## a1\n\n" + "x" * 100 + "\n\n## a2\n\n" + "y" * 100 + "\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=1000, min_chars=80)).split_text(text)
+
+    assert len(chunks) == 2
+
+
+def test_merge_does_not_cross_heading_levels_with_the_same_parent() -> None:
+    text = "# A\n\n### C\n\n" + "c" * 10 + "\n\n## B\n\n" + "b" * 10 + "\n"
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert [chunk.headings for chunk in chunks] == [("A", "C"), ("A", "B")]
+
+
+def test_merge_stops_at_a_skipped_block() -> None:
+    text = (
+        "# A\n\n## a1\n\nshort one\n\n"
+        "## a2\n\nexport const X = 1;\n\nshort two\n"
+    )
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert [chunk.headings for chunk in chunks] == [("A", "a1"), ("A", "a2")]
+
+
+def test_merge_stops_when_the_previous_section_ends_with_a_skipped_block() -> None:
+    text = (
+        "# A\n\n## a1\n\nshort one\n\nexport const X = 1;\n\n"
+        "## a2\n\nshort two\n"
+    )
+
+    chunks = Chunker(ChunkConfig(min_chars=100)).split_text(text)
+
+    assert [chunk.headings for chunk in chunks] == [("A", "a1"), ("A", "a2")]
+
+
+def test_merged_sections_keep_the_first_heading_path() -> None:
+    text = "# A\n\n## a1\n\nshort one\n\n## a2\n\nshort two\n"
+
+    chunks = Chunker(
+        ChunkConfig(min_chars=100, include_headings=True)
+    ).split_text(text)
+
+    assert len(chunks) == 1
+    assert chunks[0].headings == ("A", "a1")
+    assert chunks[0].content.startswith("# A\n\n## a1")
+    assert "## a2" in chunks[0].content
+
+
+def test_merge_counts_the_separators_between_blocks() -> None:
+    # 两个块本身合计 156 字符，但加上标题与空行后的实际区间是 162
+    text = "## a1\n\n" + "x" * 74 + "\n\n## a2\n\n" + "y" * 74 + "\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=160, min_chars=100)).split_text(text)
+
+    assert [chunk.headings for chunk in chunks] == [("a1",), ("a2",)]

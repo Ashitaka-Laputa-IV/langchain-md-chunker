@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -266,3 +267,82 @@ def test_include_headings_after_dropped_heading_resync() -> None:
     assert len(chunks) == 1
     assert chunks[0].text == "body text"
     assert chunks[0].content == "# 1\n## 2\n\nbody text"
+
+
+def test_chunk_ids_are_16_hex(tmp_path: Path) -> None:
+    chunks = Chunker().split_text("# T\n\nbody\n", doc="a.md")
+
+    assert re.fullmatch(r"c[0-9a-f]{16}", chunks[0].id)
+
+
+def test_content_id_is_stable_across_documents() -> None:
+    chunker = Chunker(ChunkConfig(id_strategy="content"))
+    first = chunker.split_text("# T\n\nbody\n", doc="a.md")[0]
+    second = chunker.split_text("# T\n\nbody\n", doc="b.md")[0]
+    other = chunker.split_text("# T\n\nother\n", doc="c.md")[0]
+
+    assert first.id == second.id
+    assert first.id != other.id
+
+
+def test_content_id_follows_the_content_not_the_offsets() -> None:
+    chunker = Chunker(ChunkConfig(id_strategy="content"))
+    first = chunker.split_text("Intro.\n\n# T\n\nbody\n", doc="a.md")
+    moved = chunker.split_text("# T\n\nbody\n", doc="a.md")
+
+    tail = next(chunk for chunk in first if chunk.text == "# T\n\nbody")
+    assert tail.id == moved[0].id
+
+
+def test_invalid_id_strategy_is_rejected() -> None:
+    with pytest.raises(ValueError, match="id_strategy"):
+        ChunkConfig(id_strategy="uuid")
+
+
+def test_split_file_honours_encoding(tmp_path: Path) -> None:
+    target = tmp_path / "latin.md"
+    target.write_bytes("# T\n\ncafé\n".encode("latin-1"))
+
+    chunks = Chunker().split_file(target, encoding="latin-1")
+
+    assert "café" in chunks[0].text
+    with pytest.raises(UnicodeDecodeError):
+        Chunker().split_file(target)
+
+
+def test_split_directory_can_skip_unreadable_files(tmp_path: Path) -> None:
+    write(tmp_path / "good.md", "# Good\n\nbody\n")
+    (tmp_path / "bad.md").write_bytes(b"# Bad\n\n\xff\xfe\n")
+
+    with pytest.raises(UnicodeDecodeError):
+        Chunker().split_directory(tmp_path)
+
+    chunks = Chunker().split_directory(tmp_path, on_error="skip")
+
+    assert [chunk.doc for chunk in chunks] == ["good.md"]
+
+
+def test_iter_directory_streams_in_the_same_order(tmp_path: Path) -> None:
+    write(tmp_path / "b.md", "# B\n\nbody\n")
+    write(tmp_path / "a.md", "# A\n\nbody\n")
+    chunker = Chunker()
+
+    iterator = chunker.iter_directory(tmp_path)
+
+    assert iter(iterator) is iterator
+    assert [chunk.doc for chunk in iterator] == [
+        chunk.doc for chunk in chunker.split_directory(tmp_path)
+    ]
+    assert [chunk.doc for chunk in chunker.iter_directory(tmp_path)] == ["a.md", "b.md"]
+
+
+def test_invalid_on_error_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="on_error"):
+        Chunker().split_directory(tmp_path, on_error="warn")
+
+
+def test_iter_directory_validates_before_iteration(tmp_path: Path) -> None:
+    with pytest.raises(NotADirectoryError):
+        Chunker().iter_directory(tmp_path / "missing")
+    with pytest.raises(ValueError, match="on_error"):
+        Chunker().iter_directory(tmp_path, on_error="warn")

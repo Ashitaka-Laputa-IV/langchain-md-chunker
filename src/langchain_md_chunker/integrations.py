@@ -28,7 +28,7 @@ def to_langchain_documents(
     Returns:
         A list of ``Document`` instances. Metadata keys: ``id``, ``source``
         (alias of ``doc``), ``doc``, ``start``, ``end``, ``start_line``,
-        ``end_line``, ``chars``, ``headings``, ``context``.
+        ``end_line``, ``chars``, ``headings``, ``context``, ``kind``, ``lang``.
 
     Raises:
         ImportError: ``langchain-core`` is not installed.
@@ -61,6 +61,8 @@ def to_langchain_documents(
                     "chars": chunk.chars,
                     "headings": list(chunk.headings),
                     "context": chunk.context,
+                    "kind": chunk.kind,
+                    "lang": chunk.lang,
                 },
             )
         )
