@@ -17,24 +17,25 @@
 ```bash
 uv sync                                        # 安装（含 dev 依赖）
 uv run python data/download_docs.py            # 下载语料，约 180 篇 / 5 MB
-uv run chunk --verify                          # 切分并校验偏移
+uv run chunk data/langchain-docs --verify      # 切分并校验偏移（目录需显式指定）
 uv run python demo/server.py                   # 打开 http://127.0.0.1:8000 浏览
 ```
 
 ## 切分命令
 
 ```bash
-uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--include-headings] [--verify]
+uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--include-headings] [--verify] [--quiet]
 ```
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `INPUT` | `data/langchain-docs` | 源文档目录 |
+| `INPUT` | 必填 | 源文档目录（不内置任何默认语料） |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
 | `-p, --pattern` | `*.md`, `*.mdx` | 文件匹配模式，可重复 |
 | `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
 | `--verify` | 关闭 | 写盘前回读源文件，逐条校验偏移 |
+| `--quiet` | 关闭 | 只输出错误与警告 |
 
 输出：
 
@@ -115,7 +116,7 @@ content = "# 1\n## 2\n\n### 3\n\nxxxxx"
   实测语料上 `content` 平均比 `text` 多 43 字符（最大 137）。
 
 ```bash
-uv run chunk --include-headings --verify      # 语料产物带标题前缀
+uv run chunk data/langchain-docs --include-headings --verify   # 产物带标题前缀
 # 或
 Chunker(ChunkConfig(include_headings=True))
 ```
@@ -171,7 +172,7 @@ uv run python demo/server.py --port 8000
 - 顶部显示文档路径、字符偏移、行号、标题路径，可另开原始文件；
 - URL 形如 `http://127.0.0.1:8000/#c32352242f27`，可直接分享某个 chunk。
 
-前端没有构建步骤（原生 ES modules + HTML/CSS），服务端只用标准库，不导入 chunker 包，因此不会污染核心。修改语料后重新 `uv run chunk`，服务会自动重载。
+前端没有构建步骤（原生 ES modules + HTML/CSS），服务端只用标准库，不导入 chunker 包，因此不会污染核心。修改语料后重新 `uv run chunk data/langchain-docs`，服务会自动重载。
 
 ## 目录结构
 
@@ -182,7 +183,7 @@ src/langchain_md_chunker/
 ├── splitter.py     # 块解析 + 切分算法
 ├── chunker.py      # 文件 / 目录级封装
 ├── storage.py      # JSONL + manifest 读写
-└── cli.py          # `uv run chunk`
+└── cli.py          # `uv run chunk <INPUT>`
 demo/
 ├── server.py       # 演示服务（stdlib）
 └── static/         # index.html / app.js / styles.css
@@ -201,7 +202,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 101 项，秒级
+uv run pytest                       # 102 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
