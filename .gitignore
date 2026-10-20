@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# 语料与切分产物：体积大、可随时重建，不入库
+data/langchain-docs/
+data/chunks/

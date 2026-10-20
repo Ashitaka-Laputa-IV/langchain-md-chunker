@@ -1,0 +1,23 @@
+[project]
+name = "langchain-md-chunker"
+version = "0.1.0"
+description = "MDX-aware markdown chunker that keeps source character offsets"
+readme = "README.md"
+authors = [
+    { name = "Ashitaka-Laputa-IV", email = "Ashitaka-Laputa-IV@outlook.com" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+chunk = "langchain_md_chunker.cli:main"
+langchain-md-chunker = "langchain_md_chunker:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
