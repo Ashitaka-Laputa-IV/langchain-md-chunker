@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import codecs
 import sys
 import time
 from pathlib import Path
@@ -121,8 +122,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = _build_config(args)
+        codecs.lookup(args.encoding)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except LookupError:
+        print(f"error: unknown encoding: {args.encoding}", file=sys.stderr)
         return 2
 
     started = time.perf_counter()

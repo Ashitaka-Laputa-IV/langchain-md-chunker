@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-20
+
+### 修复
+
+- **location id 跨文档碰撞**：`location` 策略的哈希现在包含 `content`，默认 `doc="<memory>"` 或同名 basename 的不同内容不会再产生相同 id。
+- **CRLF 偏移**：`split_file` / `verify_chunks` / demo 源码读取改用 `newline=""`，保留原始 `\r\n`，偏移可直接用于原始文件高亮。
+- `split_file` 的文件不在 `root` 下时抛 `ValueError`，不再静默退化为 basename。
+- `import` 无分号且无 `{` / `(` 时只取一行，不再吞掉下一段正文。
+- 识别 `export { ... }` / `export * from ...`、HTML 注释 `<!-- ... -->`、同名嵌套组件（`<Tabs><Tabs>...`）。
+- 移除数学块 / 容器的 400 行扫描上限；未闭合时仍回退为段落。
+- 输出文件权限从 `0600` 改为 `0644`；`read_chunks` 拒绝高于当前格式版本的索引；`Chunk.from_dict` 校验非法偏移。
+- CLI 对未知编码返回退出码 `2`，不再 traceback。
+
+### 变更
+
+- `IGNORED_DIRS` 增加 `.github`、`.next`、`.vscode`、`vendor`。
+- 新增 `.github/workflows/ci.yml`（3.11/3.12/3.13）；`publish` 增加 test/lint 门禁，覆盖率 `fail_under = 100`。
+- 增加 Python 3.14 classifier。
+
+### 文档
+
+- 明确解析器是启发式实现；说明 `location` id 依赖内容、`split_file` 保留原始换行、`root` 外抛错。
+
 ## [0.4.1] - 2026-10-20
 
 ### 修复
@@ -97,7 +120,8 @@
 - `chunks.jsonl` 与 `manifest.json` 分别原子替换，不是跨文件事务。
 - 仅支持 Python 3.13+。
 
-[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.2.0...v0.3.0

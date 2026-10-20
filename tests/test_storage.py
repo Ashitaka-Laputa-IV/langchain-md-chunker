@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -188,3 +189,30 @@ def test_manifest_timestamp_honours_source_date_epoch(
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "not-a-number")
     fallback = build_manifest(chunks, source_root=tmp_path, config=ChunkConfig())
     assert fallback["generated_at"]
+
+
+def test_written_files_are_world_readable(tmp_path: Path) -> None:
+    path, manifest_path = write_chunks(make_chunks(), tmp_path, manifest={"k": 1})
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o644
+    assert stat.S_IMODE(manifest_path.stat().st_mode) == 0o644
+
+
+def test_read_chunks_rejects_a_newer_format(tmp_path: Path) -> None:
+    write_chunks(make_chunks(), tmp_path, manifest={"format_version": 999})
+
+    with pytest.raises(ValueError, match="unsupported store format"):
+        read_chunks(tmp_path)
+
+
+def test_from_dict_rejects_invalid_offsets() -> None:
+    with pytest.raises(ValueError, match="invalid chunk offsets"):
+        Chunk.from_dict(
+            {
+                "id": "c1",
+                "doc": "a.md",
+                "start": 10,
+                "end": 5,
+                "text": "body",
+            }
+        )

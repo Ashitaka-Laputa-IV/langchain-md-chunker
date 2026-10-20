@@ -1,6 +1,6 @@
 # API 参考
 
-`langchain-md-chunker` v0.4.1。把 markdown / MDX 文档切成带**源文件字符偏移**的 chunk，并可持久化为 JSONL。
+`langchain-md-chunker` v0.4.2。把 markdown / MDX 文档切成带**源文件字符偏移**的 chunk，并可持久化为 JSONL。
 
 本文档只覆盖**公开 API**；内部实现不在兼容性承诺内。纯 Markdown，可直接在 GitHub / 编辑器里阅读。
 
@@ -70,7 +70,7 @@ __version__  build_manifest  langchain_docs  read_chunks  read_manifest
 to_langchain_documents  verify_chunks  write_chunks
 ```
 
-其中 `__version__` 是包版本号（当前 `0.4.1`）。
+其中 `__version__` 是包版本号（当前 `0.4.2`）。
 
 - `Chunker` 是唯一入口，`split_text` / `split_file` / `split_directory` / `iter_directory` 覆盖内存、单文件、目录（列表或流式）。
 - 配置、预设、模型、存储、校验、CLI 的公开名字见各页顶部的 `__all__` 说明。

@@ -390,3 +390,50 @@ def test_indented_fence_inside_a_fence_does_not_close_it() -> None:
 
     assert [block.kind for block in blocks] == ["code", "heading"]
     assert "# still code" in text[blocks[0].start : blocks[0].end]
+
+
+def test_import_without_semicolon_does_not_swallow_the_next_paragraph() -> None:
+    text = "import x from 'y'\nThis is a real paragraph.\n\n# H\n\nbody\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["import", "para", "heading", "para"]
+    assert text[blocks[1].start : blocks[1].end] == "This is a real paragraph."
+
+
+def test_multiline_import_stops_at_a_blank_line() -> None:
+    text = "import {\n  A,\n\n  B\n"
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "import"
+    assert text[blocks[0].start : blocks[0].end] == "import {\n  A,"
+
+
+def test_export_star_and_export_list_are_recognised() -> None:
+    text = "export { Foo };\n\nexport * from './x';\n\ntext\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["export", "export", "para"]
+
+
+def test_html_comment_is_a_comment_block() -> None:
+    text = "<!-- hidden\nnote -->\n\ntext\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["comment", "para"]
+    assert "hidden" in text[blocks[0].start : blocks[0].end]
+
+
+def test_unclosed_html_comment_falls_back_to_paragraph() -> None:
+    text = "<!-- hidden\n\ntext\n"
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind == "para"
+
+
+def test_nested_component_with_the_same_name_does_not_close_early() -> None:
+    text = "<Tabs>\n<TabItem><Tabs>\ninner\n</Tabs></TabItem>\n</Tabs>\n\ntail\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["mdx", "para"]
+    assert text[blocks[0].start : blocks[0].end].endswith("</Tabs>")
+    assert "inner" in text[blocks[0].start : blocks[0].end]

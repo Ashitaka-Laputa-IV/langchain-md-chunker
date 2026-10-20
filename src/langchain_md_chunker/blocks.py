@@ -36,9 +36,11 @@ MDX_COMMENT_RE = re.compile(r"^\{/\*")
 
 
 EXPORT_RE = re.compile(
-    r"^export[ \t]+(?:default[ \t]+|const[ \t]+|let[ \t]+|var[ \t]+|"
-    r"function[ \t]+|async[ \t]+function[ \t]+|type[ \t]+|interface[ \t]+)"
+    r"^export[ \t]+(?:\{[^}]*\}|\*[ \t]*(?:from|as)\b|default\b|const\b|"
+    r"let\b|var\b|function\b|async[ \t]+function\b|class\b|type\b|"
+    r"interface\b|enum\b)"
 )
+HTML_COMMENT_RE = re.compile(r"^[ \t]*<!--")
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +143,13 @@ def parse_blocks(text: str) -> list[Block]:
             index = end + 1
             continue
 
+        if HTML_COMMENT_RE.match(source):
+            end = _end_of_html_comment(lines, index)
+            if end is not None:
+                blocks.append(Block("comment", line.start, lines[end].end))
+                index = end + 1
+                continue
+
         if MDX_COMMENT_RE.match(source):
             end = _end_of_mdx_comment(lines, index)
             blocks.append(Block("comment", line.start, lines[end].end))
@@ -232,11 +241,21 @@ def _end_of_export(lines: list[Line], index: int) -> int:
 
 
 def _end_of_import(lines: list[Line], index: int) -> int:
-    """Last line of an ESM import statement (single or multi-line)."""
+    """Last line of an ESM import statement.
+
+    A statement without ``{`` / ``(`` and without a semicolon is treated as a
+    single line. Extending it until a blank line (the old behaviour) swallowed
+    the following paragraph, which then disappeared with the skipped block.
+    """
+    first = lines[index].text
+    if ";" in first or ("{" not in first and "(" not in first):
+        return index
+
+    balance = (
+        first.count("{") - first.count("}") + first.count("(") - first.count(")")
+    )
     end = index
-    if ";" in lines[index].text:
-        return end
-    while end + 1 < len(lines):
+    while balance > 0 and end + 1 < len(lines):
         following = lines[end + 1].text
         if (
             not following.strip()
@@ -245,9 +264,19 @@ def _end_of_import(lines: list[Line], index: int) -> int:
         ):
             break
         end += 1
-        if ";" in following:
-            break
+        balance += (
+            following.count("{") - following.count("}")
+            + following.count("(") - following.count(")")
+        )
     return end
+
+
+def _end_of_html_comment(lines: list[Line], index: int) -> int | None:
+    """Last line of an HTML comment, or ``None`` when it is unclosed."""
+    for end in range(index, len(lines)):
+        if "-->" in lines[end].text:
+            return end
+    return None
 
 
 def _end_of_mdx_comment(lines: list[Line], index: int) -> int:
@@ -323,6 +352,7 @@ def _end_of_paragraph(lines: list[Line], index: int) -> int:
             or MATH_RE.match(following)
             or CONTAINER_RE.match(following)
             or FOOTNOTE_RE.match(following)
+            or HTML_COMMENT_RE.match(following)
             or _is_table_start(lines, end + 1)
             or following.startswith("<")
             or _setext_level(following) is not None
@@ -370,8 +400,7 @@ def _read_math(lines: list[Line], index: int, blocks: list[Block]) -> int | None
         blocks.append(Block("math", lines[index].start, lines[index].end))
         return index + 1
 
-    limit = min(len(lines), index + 400)
-    for end in range(index + 1, limit):
+    for end in range(index + 1, len(lines)):
         if "$$" in lines[end].text:
             blocks.append(Block("math", lines[index].start, lines[end].end))
             return end + 1
@@ -380,8 +409,7 @@ def _read_math(lines: list[Line], index: int, blocks: list[Block]) -> int | None
 
 def _read_container(lines: list[Line], index: int) -> int | None:
     """Read a ``:::name ... :::`` container; ``None`` when it is unclosed."""
-    limit = min(len(lines), index + 400)
-    for end in range(index + 1, limit):
+    for end in range(index + 1, len(lines)):
         if lines[end].text.strip() == ":::":
             return end
     return None
@@ -457,7 +485,9 @@ def _find_mdx_close(lines: list[Line], index: int, name: str) -> int | None:
     if source.rstrip().endswith("/>") or close_tag in source:
         return index
 
-    open_prefix = f"<{name}"
+    open_re = re.compile(rf"<{re.escape(name)}(?=[ \t/>]|$)")
+    close_re = re.compile(rf"</{re.escape(name)}(?=[ \t>]|$)")
+    self_close_re = re.compile(rf"<{re.escape(name)}\b[^>]*/>")
     depth = 1
     fence: str | None = None
     fence_indent = 0
@@ -479,24 +509,17 @@ def _find_mdx_close(lines: list[Line], index: int, name: str) -> int | None:
             cursor += 1
             continue
 
-        # Nested components are usually indented, so match the tag after trimming.
-        trimmed = current.strip()
-        if _opens_tag(trimmed, open_prefix) and not trimmed.endswith("/>"):
-            depth += 1
-        if close_tag in trimmed:
-            depth -= 1
-            if depth <= 0:
-                return cursor
+        # Count every tag on the line: nested components often share a line
+        # (``<TabItem><Tabs>``), so only matching the line prefix is not enough.
+        opens = len(open_re.findall(current))
+        self_closes = len(self_close_re.findall(current))
+        closes = len(close_re.findall(current))
+        depth += opens - self_closes - closes
+        if depth <= 0:
+            return cursor
         cursor += 1
 
     return None
 
-
-def _opens_tag(trimmed: str, prefix: str) -> bool:
-    """Whether a trimmed line opens the tag named by ``prefix`` (``<Tabs``)."""
-    if not trimmed.startswith(prefix):
-        return False
-    rest = trimmed[len(prefix) :]
-    return rest[:1] in {"", " ", "\t", "/", ">"}
 
 __all__ = ["Block", "Line", "parse_blocks", "split_lines"]

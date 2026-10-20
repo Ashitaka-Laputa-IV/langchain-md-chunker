@@ -267,3 +267,13 @@ def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
 
     assert excinfo.value.code == 0
     assert __version__ in capsys.readouterr().out
+
+
+def test_cli_rejects_unknown_encoding(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = make_tree(tmp_path)
+
+    assert cli.main([str(source), "--encoding", "no-such-codec"]) == 2
+
+    assert "unknown encoding" in capsys.readouterr().err

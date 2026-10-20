@@ -32,12 +32,11 @@ def test_split_file_defaults_root_to_parent(tmp_path: Path) -> None:
     assert Chunker().split_file(target)[0].doc == "page.md"
 
 
-def test_split_file_falls_back_to_name_outside_root(tmp_path: Path) -> None:
+def test_split_file_outside_root_is_rejected(tmp_path: Path) -> None:
     target = write(tmp_path / "page.md", "# T\n\nbody\n")
 
-    chunks = Chunker().split_file(target, root=tmp_path / "elsewhere")
-
-    assert chunks[0].doc == "page.md"
+    with pytest.raises(ValueError, match="not under root"):
+        Chunker().split_file(target, root=tmp_path / "elsewhere")
 
 
 def test_split_directory_filters_and_is_stable(tmp_path: Path) -> None:
@@ -357,3 +356,33 @@ def test_verify_chunks_honours_encoding(tmp_path: Path) -> None:
     problems = verify_chunks(chunks, tmp_path)
     assert len(problems) == 1
     assert "cannot read" in problems[0]
+
+
+def test_memory_chunk_ids_include_content() -> None:
+    first = Chunker().split_text("# A\n\nbody\n")
+    second = Chunker().split_text("# B\n\nbody\n")
+
+    assert first[0].id != second[0].id
+
+
+def test_split_file_keeps_crlf_offsets(tmp_path: Path) -> None:
+    target = tmp_path / "crlf.md"
+    target.write_bytes(b"# A\r\n\r\nbody line\r\n")
+    raw = target.read_bytes().decode("utf-8")
+
+    chunks = Chunker().split_file(target, root=tmp_path)
+
+    assert len(chunks) == 1
+    assert raw[chunks[0].start : chunks[0].end] == chunks[0].text
+    assert "\r\n" in chunks[0].text
+    assert verify_chunks(chunks, tmp_path) == []
+
+
+def test_split_directory_skips_editor_and_vendor_directories(tmp_path: Path) -> None:
+    write(tmp_path / "keep.md", "# Keep\n\nbody\n")
+    for name in (".github", ".next", ".vscode", "vendor"):
+        write(tmp_path / name / "noise.md", "# Noise\n\nbody\n")
+
+    docs = [chunk.doc for chunk in Chunker().split_directory(tmp_path)]
+
+    assert docs == ["keep.md"]

@@ -52,6 +52,7 @@ def _atomic_write(path: Path, writer: Callable[[TextIO], None]) -> None:
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             writer(handle)
+        os.chmod(temp_name, 0o644)
         os.replace(temp_name, path)
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
@@ -94,6 +95,12 @@ def read_chunks(path: str | Path) -> list[Chunk]:
     """Read a chunk store, accepting either a directory or a ``.jsonl`` file."""
     target = Path(path)
     if target.is_dir():
+        manifest = read_manifest(target)
+        format_version = int(manifest.get("format_version", FORMAT_VERSION))
+        if format_version > FORMAT_VERSION:
+            raise ValueError(
+                f"unsupported store format {format_version} (this build reads {FORMAT_VERSION})"
+            )
         target = target / CHUNKS_FILE
 
     chunks: list[Chunk] = []

@@ -6,6 +6,8 @@
 
 核心是可复用的 Python 包（纯标准库、零运行时依赖）；`demo/` 里的网页只是演示，不参与打包。
 
+> 本项目是**社区/第三方项目**，与 LangChain 官方组织没有隶属关系；包名中的 `langchain` 仅表示适用场景。
+
 API 参考见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/docs/api/index.md)。
 
 ## 特点
@@ -23,6 +25,9 @@ API 参考见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchai
 
 ```bash
 uv add langchain-md-chunker
+
+# 需要 to_langchain_documents() 时
+uv add "langchain-md-chunker[langchain]"
 ```
 
 仓库内开发：
@@ -108,7 +113,7 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 
 | 字段 | 说明 |
 | --- | --- |
-| `id` | `c` + 16 位十六进制。默认由 `doc + start + end` 派生；`id_strategy="content"` 时由 `content` 派生 |
+| `id` | `c` + 16 位十六进制。默认由 `doc + start + end + content` 派生（内容变化会得到新 id）；`id_strategy="content"` 时只由 `content` 派生 |
 | `doc` | 相对 `manifest.source_root` 的源文件路径 |
 | `start` / `end` | 半开区间 `[start, end)`，单位是 **Unicode 码点** |
 | `start_line` / `end_line` | 1-based 行号，闭区间 |
@@ -188,7 +193,7 @@ content = "```python\nprint(42)\n```"
 2. **分节**：按标题层级构造标题栈，每个 chunk 归属唯一一节，并带上该节标题路径。
 3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。设置 `min_chars` 后，同一父节下、同一层级的相邻小节会先合并（不跨父节，且合并后仍不超 `max_chars`）；合并后的 chunk 采用第一个小节的标题路径，正文仍包含后续小节标题。
 4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；切出的片段在 `content` 中补围栏 / 表头 / 组件名（见上节）。
-5. **丢弃**：`skip_kinds`（frontmatter / export / import / MDX 注释）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB），并以标题/围栏为安全边界，绝不会吞掉正文。
+5. **丢弃**：`skip_kinds`（frontmatter / export / import / MDX 注释）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB）；`import` 无分号且没有 `{` / `(` 时只取一行，不会吞掉下一段正文。
 
 **已知限制与设计取舍**：
 
@@ -198,7 +203,8 @@ content = "```python\nprint(42)\n```"
 - 不支持 4 空格缩进、**无围栏**的代码块（它更像列表续行或组件内容）；列表项内**带围栏**的代码（任意缩进）已支持。
 - 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）；若需要片段自带的围栏/表头，请使用 `content`（`text` 始终不含合成内容）。
 - `split_directory` 是单线程同步 IO；5 MB 语料约 0.5 s，更大规模建议按目录分片。
-- 偏移按 Unicode 码点；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
+- 偏移按 Unicode 码点，且 `split_file` 用 `newline=""` 读取，保留原始 `\r\n`；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
+- 解析器是面向 Docusaurus / Nextra 的**启发式**实现，不是 CommonMark/MDX 规范解析器；复杂嵌套、字符串内大括号等边界可能与规范解析器不同。
 
 ## Python API
 
@@ -306,7 +312,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 216 项，秒级
+uv run pytest                       # 229 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
@@ -317,7 +323,7 @@ uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依�
 
 - chunk 切片等于源文件 `[start, end)`，且行号、标题路径、上下文自洽；
 - 代码围栏、表格、MDX 组件不会被“半个标签”切断，围栏内的 `#` 不当标题；
-- Unicode（非 BMP 字符）、CRLF 文件的偏移按码点而非字节；
+- Unicode（非 BMP 字符）、CRLF 文件的偏移按**原始文件**（保留 `\r\n`）的码点计；
 - 文件/目录 API 的 `doc` 路径、排序稳定性与 `verify_chunks` 的负例；
 - CLI 退出码、`--verify` 失败、`--max-chars`/`-p` 生效；
 - 语料存在时对全量 4700+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。

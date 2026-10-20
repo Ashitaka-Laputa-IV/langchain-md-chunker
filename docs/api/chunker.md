@@ -84,8 +84,8 @@ def split_file(
 | 参数 | 说明 |
 | --- | --- |
 | `path` | 文件路径 |
-| `root` | `Chunk.doc` 的基准目录；默认取文件所在目录。文件不在 `root` 内时 `doc` 回退为文件名 |
-| `encoding` | 读取编码，默认 `utf-8` |
+| `root` | `Chunk.doc` 的基准目录；默认取文件所在目录。文件不在 `root` 内时抛 `ValueError`（不再静默退化为 basename） |
+| `encoding` | 读取编码，默认 `utf-8`；按原始换行读取（`newline=""`），保留 `\r\n` |
 
 ```python
 chunks = Chunker().split_file("data/langchain-docs/oss/python/learn.md", root="data/langchain-docs")
@@ -115,7 +115,7 @@ def split_directory(
 | --- | --- |
 | `root` | 源目录；不存在或不是目录时抛 `NotADirectoryError` |
 | `patterns` | glob 模式序列，可重复；同一文件只会被切分一次 |
-| `encoding` | 读取编码，默认 `utf-8` |
+| `encoding` | 读取编码，默认 `utf-8`；按原始换行读取（`newline=""`），保留 `\r\n` |
 | `on_error` | `"raise"`（默认）或 `"skip"`：跳过不可读/解码失败的文件 |
 | `on_skip` | 仅 `on_error="skip"` 时生效的可选回调，接收 `(path, exception)` |
 

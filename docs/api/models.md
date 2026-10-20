@@ -29,7 +29,7 @@ class Chunk:
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `id` | `str` | 稳定 ID：`c` + 16 位十六进制，如 `c80da3f281601b31`。默认由 `sha1(doc + start + end)` 派生；`id_strategy="content"` 时由 `content` 派生。 |
+| `id` | `str` | 稳定 ID：`c` + 16 位十六进制，如 `c80da3f281601b31`。默认由 `sha1(doc + start + end + content)` 派生；`id_strategy="content"` 时只由 `content` 派生。 |
 | `doc` | `str` | 相对 `root` 的源文件路径（POSIX 分隔符），如 `oss/python/learn.md`；`split_text` 默认 `"<memory>"`。 |
 | `start` / `end` | `int` | 半开区间 `[start, end)`，单位是 Unicode 码点。 |
 | `start_line` / `end_line` | `int` | 1-based、闭区间的源文件行号。 |
@@ -84,7 +84,7 @@ def from_dict(cls, data: dict[str, Any]) -> Chunk
 
 `to_dict()` 的逆操作，用于读回 JSONL：
 
-- 必填：`id`、`doc`、`start`、`end`；
+- 必填：`id`、`doc`、`start`、`end`（`start < 0` 或 `end < start` 时抛 `ValueError`）；
 - 可选：`start_line`、`end_line`（缺省 `0`）、`headings`（缺省空）、`context`、`text`、`content`、`kind`（缺省 `text`）、`lang`（缺省空）；
 - `content` 缺失或为空时自动回退为 `text`。
 

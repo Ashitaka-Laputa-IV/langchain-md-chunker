@@ -134,7 +134,8 @@ class ChunkStore:
         root = self.source_root.resolve()
         if not target.is_relative_to(root):
             raise PermissionError(f"路径越界: {doc}")
-        return target.read_text(encoding="utf-8")
+        with target.open("r", encoding="utf-8", newline="") as handle:
+            return handle.read()
 
     def stats(self) -> dict[str, Any]:
         return {

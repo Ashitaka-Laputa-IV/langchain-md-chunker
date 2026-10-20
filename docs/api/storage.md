@@ -51,7 +51,7 @@ def write_chunks(
 
 返回 `(chunks.jsonl 路径, manifest.json 路径)`。
 
-**写入方式**：每个文件先写同目录临时文件（`.<name>.*.tmp`）再 `os.replace` 原子替换，因此读取方不会看到
+**写入方式**：每个文件先写同目录临时文件（`.<name>.*.tmp`）再 `os.replace` 原子替换，文件权限设为 `0644`，因此读取方不会看到
 截断的文件。两个文件分别替换，**不是跨文件事务**：极端情况下读者可能短暂看到“新 chunk + 旧 manifest”。
 
 ```python
@@ -136,6 +136,7 @@ def build_manifest(
 }
 ```
 
+`read_chunks` 会在目录模式读取 manifest，遇到高于当前 `FORMAT_VERSION` 的索引直接抛 `ValueError`，不会静默读错。
 字段含义见 [models.md](models.md)。`content` 可能含合成内容（标题、补出的围栏、重复表头、MDX 注释），
 回原文定位请用 `text` 与 `start/end`。
 

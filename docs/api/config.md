@@ -84,7 +84,7 @@ ID_STRATEGIES: tuple[str, ...] = ("location", "content")
 
 `ChunkConfig.id_strategy` 的合法取值：
 
-- `location`：`sha1(doc, start, end)` 前 16 位。切片位置不变则 id 稳定，适合增量索引。
+- `location`：`sha1(doc, start, end, content)` 前 16 位。位置不变且内容不变时 id 稳定，适合增量索引；内容变化会得到新 id。
 - `content`：`sha1(content)` 前 16 位。内容相同即 id 相同，可用于跨文档去重；不同位置但内容一致的 chunk 会共享 id。
 
 ## 另见

@@ -20,7 +20,10 @@ ON_ERROR_MODES: tuple[str, ...] = ("raise", "skip")
 IGNORED_DIRS: frozenset[str] = frozenset(
     {
         ".git",
+        ".github",
         ".hg",
+        ".next",
+        ".vscode",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
@@ -31,6 +34,7 @@ IGNORED_DIRS: frozenset[str] = frozenset(
         "build",
         "dist",
         "node_modules",
+        "vendor",
         "venv",
     }
 )
@@ -41,7 +45,7 @@ def _chunk_id(doc: str, start: int, end: int, content: str, strategy: str) -> st
     payload = (
         f"content\0{content}"
         if strategy == "content"
-        else f"{doc}\0{start}\0{end}"
+        else f"{doc}\0{start}\0{end}\0{content}"
     )
     digest = hashlib.sha1(payload.encode()).hexdigest()
     return f"c{digest[:16]}"
@@ -123,14 +127,23 @@ class Chunker:
         root: str | Path | None = None,
         encoding: str = "utf-8",
     ) -> list[Chunk]:
-        """Split one file. ``doc`` becomes the path relative to ``root``."""
+        """Split one file. ``doc`` becomes the path relative to ``root``.
+
+        The file must live under ``root``: silently falling back to the basename
+        made two different ``x.md`` files share ``doc`` and therefore chunk ids.
+        Newlines are read verbatim (``newline=""``), so offsets address the raw
+        file rather than a universal-newline normalised copy.
+        """
         file_path = Path(path)
-        text = file_path.read_text(encoding=encoding)
+        with file_path.open("r", encoding=encoding, newline="") as handle:
+            text = handle.read()
         base = Path(root) if root is not None else file_path.parent
         try:
             doc = file_path.resolve().relative_to(base.resolve()).as_posix()
-        except ValueError:
-            doc = file_path.name
+        except ValueError as exc:
+            raise ValueError(
+                f"{file_path} is not under root {base}; pass a root that contains it"
+            ) from exc
         return self.split_text(text, doc=doc)
 
     def iter_directory(

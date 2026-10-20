@@ -28,7 +28,8 @@ def verify_chunks(
             continue
         if chunk.doc not in texts:
             try:
-                texts[chunk.doc] = (base / chunk.doc).read_text(encoding=encoding)
+                with (base / chunk.doc).open("r", encoding=encoding, newline="") as handle:
+                    texts[chunk.doc] = handle.read()
             except (OSError, UnicodeDecodeError) as exc:
                 unreadable.add(chunk.doc)
                 problems.append(f"{chunk.doc}: cannot read source file ({type(exc).__name__})")

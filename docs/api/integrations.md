@@ -28,7 +28,7 @@ def to_langchain_documents(
 ### 依赖
 
 ```bash
-uv add langchain-core        # 或 pip install langchain-core
+uv add "langchain-md-chunker[langchain]"   # 或 uv add langchain-core
 ```
 
 未安装时调用会抛 `ImportError`，消息中给出安装命令：

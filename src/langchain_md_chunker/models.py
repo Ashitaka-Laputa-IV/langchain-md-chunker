@@ -68,11 +68,15 @@ class Chunk:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Chunk:
         """Inverse of :meth:`to_dict`."""
+        start = int(data["start"])
+        end = int(data["end"])
+        if start < 0 or end < start:
+            raise ValueError(f"invalid chunk offsets: start={start}, end={end}")
         return cls(
             id=str(data["id"]),
             doc=str(data["doc"]),
-            start=int(data["start"]),
-            end=int(data["end"]),
+            start=start,
+            end=end,
             start_line=int(data.get("start_line", 0)),
             end_line=int(data.get("end_line", 0)),
             headings=tuple(str(item) for item in data.get("headings") or ()),
