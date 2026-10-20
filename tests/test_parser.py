@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 from langchain_md_chunker import parse_blocks
 
 
@@ -210,7 +212,7 @@ def test_blocks_are_ordered_and_non_overlapping() -> None:
     blocks = parse_blocks(text)
 
     assert blocks
-    for previous, current in zip(blocks, blocks[1:]):
+    for previous, current in itertools.pairwise(blocks):
         assert previous.end <= current.start
     for block in blocks:
         assert text[block.start : block.end].strip()

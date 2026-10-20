@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import CHUNKS_FILE, MANIFEST_FILE
-from langchain_md_chunker import cli
+from langchain_md_chunker import CHUNKS_FILE, MANIFEST_FILE, cli
 
 DOC = "# Title\n\n" + "\n\n".join(f"paragraph {index} " + "x" * 80 for index in range(4)) + "\n"
 
@@ -63,7 +63,7 @@ def test_cli_include_headings(tmp_path: Path) -> None:
     assert cli.main([str(source), "-o", str(out), "--include-headings", "--max-chars", "120"]) == 0
 
     records = [
-        __import__("json").loads(line)
+        json.loads(line)
         for line in (out / CHUNKS_FILE).read_text(encoding="utf-8").splitlines()
     ]
     assert len(records) > 1
@@ -93,6 +93,27 @@ def test_cli_warns_when_pattern_matches_nothing(
 
     assert "没有匹配" in capsys.readouterr().err
     assert chunk_count(tmp_path / "out") == 0
+
+
+def test_cli_reports_unreadable_source(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = make_tree(tmp_path)
+    (source / "broken.md").write_bytes(b"# T\n\n\xff\xfe\n")
+
+    assert cli.main([str(source), "-o", str(tmp_path / "out")]) == 1
+    assert "读取源文件失败" in capsys.readouterr().err
+
+
+def test_cli_reports_write_failure(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = make_tree(tmp_path)
+    out = tmp_path / "out"
+    out.write_text("not a directory", encoding="utf-8")
+
+    assert cli.main([str(source), "-o", str(out)]) == 1
+    assert "写入" in capsys.readouterr().err
 
 
 def test_cli_missing_input(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

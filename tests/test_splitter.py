@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import ChunkConfig, Chunker, split_text, verify_chunks
+from langchain_md_chunker import (
+    ChunkConfig,
+    Chunker,
+    parse_blocks,
+    split_text,
+    verify_chunks,
+)
 
 
 def test_chunk_text_matches_source_offsets() -> None:
@@ -123,7 +130,11 @@ def test_frontmatter_and_export_blocks_are_skipped() -> None:
 def test_boilerplate_prefixes_are_skipped() -> None:
     text = (
         "> ## Documentation Index\n> Fetch the complete index.\n\n"
-        '<div className="source-links">\n  <Callout icon="edit">\n    [Edit](x)\n  </Callout>\n</div>\n\n'
+        '<div className="source-links">\n'
+        '  <Callout icon="edit">\n'
+        "    [Edit](x)\n"
+        "  </Callout>\n"
+        "</div>\n\n"
         "# T\n\nreal content\n"
     )
     chunks = Chunker().split_text(text)
@@ -154,8 +165,6 @@ def test_document_without_headings_has_empty_context() -> None:
 
 def test_mdx_component_without_closing_tag_is_a_paragraph() -> None:
     text = "# T\n\n<Note>\n\ninside a note\n\n</Note>\n\n<br>\n\nend\n"
-    from langchain_md_chunker import parse_blocks
-
     blocks = parse_blocks(text)
 
     kinds = [block.kind for block in blocks]
@@ -165,8 +174,6 @@ def test_mdx_component_without_closing_tag_is_a_paragraph() -> None:
 
 def test_block_offsets_cover_their_slice() -> None:
     text = "# T\n\npara\n\n```py\nx = 1\n```\n\n| a | b |\n| - | - |\n| 1 | 2 |\n"
-    from langchain_md_chunker import parse_blocks
-
     for block in parse_blocks(text):
         assert text[block.start : block.end].strip()
 
@@ -183,7 +190,7 @@ def test_corpus_chunks_are_consistent(corpus_dir: Path, corpus_chunks) -> None:
         by_doc.setdefault(chunk.doc, []).append(chunk)
 
     for doc_chunks in by_doc.values():
-        for previous, current in zip(doc_chunks, doc_chunks[1:]):
+        for previous, current in itertools.pairwise(doc_chunks):
             assert previous.end <= current.start, "chunk 不应重叠或乱序"
 
 

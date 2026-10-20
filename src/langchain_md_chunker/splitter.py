@@ -64,15 +64,18 @@ class RawChunk:
     end: int
     start_line: int
     end_line: int
-    headings: tuple[str, ...]
     context: str
     headings_with_levels: tuple[tuple[int, str], ...] = ()
     starts_with_heading: bool = False
 
+    @property
+    def headings(self) -> tuple[str, ...]:
+        """Heading titles from outermost to innermost."""
+        return tuple(title for _, title in self.headings_with_levels)
 
-@dataclass(slots=True)
+
+@dataclass(frozen=True, slots=True)
 class _Line:
-    no: int
     start: int
     end: int
     text: str
@@ -92,12 +95,16 @@ class _Piece:
 
 
 def _lines(text: str) -> list[_Line]:
-    """Split ``text`` into lines, keeping exact character offsets."""
+    """Split ``text`` into lines, keeping exact character offsets.
+
+    A trailing newline yields one extra empty line at ``len(text)``; such lines
+    are blank and never produce blocks.
+    """
     out: list[_Line] = []
     pos = 0
-    for no, segment in enumerate(text.split("\n"), start=1):
-        content = segment[:-1] if segment.endswith("\r") else segment
-        out.append(_Line(no, pos, pos + len(content), content))
+    for segment in text.split("\n"):
+        content = segment.removesuffix("\r")
+        out.append(_Line(pos, pos + len(content), content))
         pos += len(segment) + 1
     return out
 
@@ -109,20 +116,17 @@ def parse_blocks(text: str) -> list[Block]:
     blocks: list[Block] = []
     index = 0
 
-    if lines and lines[0].text.strip().lstrip("\ufeff") == "---":
-        close = 1
-        while close < total and lines[close].text.strip() not in {"---", "..."}:
-            close += 1
-        if close < total:
-            blocks.append(Block("frontmatter", lines[0].start, lines[close].end))
-            index = close + 1
+    frontmatter_end = _end_of_frontmatter(lines)
+    if frontmatter_end is not None:
+        blocks.append(Block("frontmatter", lines[0].start, lines[frontmatter_end].end))
+        index = frontmatter_end + 1
 
     while index < total:
         line = lines[index]
         if line.start == 0 and line.text.startswith("\ufeff"):
             # A UTF-8 BOM is not part of the content: ignore it for parsing but
             # keep offsets anchored to the raw file (the BOM is simply skipped).
-            line = _Line(line.no, line.start + 1, line.end, line.text[1:])
+            line = _Line(line.start + 1, line.end, line.text[1:])
         source = line.text
 
         if not source.strip():
@@ -136,55 +140,25 @@ def parse_blocks(text: str) -> list[Block]:
 
         heading = HEADING_RE.match(source)
         if heading:
-            blocks.append(
-                Block(
-                    "heading",
-                    line.start,
-                    line.end,
-                    level=len(heading.group("hashes")),
-                    title=heading.group("title").strip(),
-                )
-            )
+            blocks.append(_heading_block(line, heading))
             index += 1
             continue
 
         if EXPORT_RE.match(source):
-            end = index
-            balance = source.count("{") - source.count("}")
-            while balance > 0 and end + 1 < total:
-                following = lines[end + 1].text
-                # Never let an unclosed export swallow a new markdown block.
-                if HEADING_RE.match(following) or FENCE_RE.match(following):
-                    break
-                end += 1
-                balance += following.count("{") - following.count("}")
+            end = _end_of_export(lines, index)
             blocks.append(Block("export", line.start, lines[end].end))
             index = end + 1
             continue
 
         stripped = source.lstrip()
         if stripped.startswith("|"):
-            end = index
-            while end + 1 < total and lines[end + 1].text.lstrip().startswith("|"):
-                end += 1
+            end = _end_of_table(lines, index)
             blocks.append(Block("table", line.start, lines[end].end))
             index = end + 1
             continue
 
         if stripped.startswith(">"):
-            end = index
-            while end + 1 < total:
-                following = lines[end + 1].text
-                if following.lstrip().startswith(">"):
-                    end += 1
-                elif (
-                    not following.strip()
-                    and end + 2 < total
-                    and lines[end + 2].text.lstrip().startswith(">")
-                ):
-                    end += 1
-                else:
-                    break
+            end = _end_of_quote(lines, index)
             blocks.append(Block("quote", line.start, lines[end].end))
             index = end + 1
             continue
@@ -203,39 +177,116 @@ def parse_blocks(text: str) -> list[Block]:
                 continue
 
         kind = "list" if LIST_RE.match(source) else "para"
-        end = index
-        while end + 1 < total:
-            following = lines[end + 1].text
-            if not following.strip():
-                break
-            if (
-                HEADING_RE.match(following)
-                or FENCE_RE.match(following)
-                or EXPORT_RE.match(following)
-                or following.startswith("<")
-            ):
-                break
-            end += 1
+        end = _end_of_paragraph(lines, index)
         blocks.append(Block(kind, line.start, lines[end].end))
         index = end + 1
 
     return blocks
 
 
+def _end_of_frontmatter(lines: list[_Line]) -> int | None:
+    """Return the closing ``---`` line index, or ``None`` when there is none."""
+    if not lines or lines[0].text.strip().lstrip("\ufeff") != "---":
+        return None
+    for index in range(1, len(lines)):
+        if lines[index].text.strip() in {"---", "..."}:
+            return index
+    return None
+
+
+def _heading_block(line: _Line, match: re.Match[str]) -> Block:
+    return Block(
+        "heading",
+        line.start,
+        line.end,
+        level=len(match.group("hashes")),
+        title=match.group("title").strip(),
+    )
+
+
+def _end_of_export(lines: list[_Line], index: int) -> int:
+    """Last line of an ``export`` block, tracked by brace balance.
+
+    LangChain docs embed multi-kilobyte JSX components in a single export; they
+    contain blank lines, so brace balance (not blank lines) decides the end. A
+    heading or fence always terminates the block early.
+    """
+    end = index
+    balance = lines[index].text.count("{") - lines[index].text.count("}")
+    while balance > 0 and end + 1 < len(lines):
+        following = lines[end + 1].text
+        if HEADING_RE.match(following) or FENCE_RE.match(following):
+            break
+        end += 1
+        balance += following.count("{") - following.count("}")
+    return end
+
+
+def _end_of_table(lines: list[_Line], index: int) -> int:
+    end = index
+    while end + 1 < len(lines) and lines[end + 1].text.lstrip().startswith("|"):
+        end += 1
+    return end
+
+
+def _end_of_quote(lines: list[_Line], index: int) -> int:
+    """Last line of a block quote; a blank line keeps the quote open."""
+    end = index
+    while end + 1 < len(lines):
+        following = lines[end + 1].text
+        if following.lstrip().startswith(">") or (
+            not following.strip()
+            and end + 2 < len(lines)
+            and lines[end + 2].text.lstrip().startswith(">")
+        ):
+            end += 1
+        else:
+            break
+    return end
+
+
+def _end_of_paragraph(lines: list[_Line], index: int) -> int:
+    """Last line of a paragraph/list; stops at blank lines and new blocks."""
+    end = index
+    while end + 1 < len(lines):
+        following = lines[end + 1].text
+        if not following.strip():
+            break
+        if (
+            HEADING_RE.match(following)
+            or FENCE_RE.match(following)
+            or EXPORT_RE.match(following)
+            or following.startswith("<")
+        ):
+            break
+        end += 1
+    return end
+
+
+def _is_closing_fence(line: str, char: str, minimum: int) -> bool:
+    """Whether ``line`` closes a fence opened with ``minimum`` ``char``s."""
+    stripped = line.lstrip(" ")
+    if len(line) - len(stripped) > 3:
+        return False
+    body = stripped.rstrip(" \t")
+    return len(body) >= minimum and set(body) == {char}
+
+
 def _read_fence(
     lines: list[_Line], index: int, match: re.Match[str], blocks: list[Block]
 ) -> int:
-    """Read a fenced code block starting at ``index``; return the next index."""
+    """Read a fenced code block starting at ``index``; return the next index.
+
+    CommonMark: a closing fence must be at least as long as the opening one,
+    otherwise ``` inside ````` would terminate the outer block.
+    """
     fence = match.group("fence")
     char = fence[0]
     info = match.group("info").strip()
     lang = info.split()[0].strip("{}.") if info else ""
-    # CommonMark: a closing fence must be at least as long as the opening one,
-    # otherwise ``` inside ````` would terminate the outer block.
-    closing = re.compile(rf"^ {{0,3}}{re.escape(char)}{{{len(fence)},}}[ \t]*$")
 
     end = index + 1
-    while end < len(lines) and not closing.match(lines[end].text):
+    while end < len(lines) and not _is_closing_fence(lines[end].text, char, len(fence)):
         end += 1
     if end < len(lines):
         blocks.append(Block("code", lines[index].start, lines[end].end, lang=lang))
@@ -272,7 +323,7 @@ def _find_mdx_close(lines: list[_Line], index: int, name: str) -> int | None:
     if source.rstrip().endswith("/>") or close_tag in source:
         return index
 
-    open_re = re.compile(rf"<{re.escape(name)}(?:[ \t/>]|$)")
+    open_prefix = f"<{name}"
     depth = 1
     fence: str | None = None
     cursor = index + 1
@@ -294,7 +345,7 @@ def _find_mdx_close(lines: list[_Line], index: int, name: str) -> int | None:
 
         # Nested components are usually indented, so match the tag after trimming.
         trimmed = current.strip()
-        if open_re.match(trimmed) and not trimmed.endswith("/>"):
+        if _opens_tag(trimmed, open_prefix) and not trimmed.endswith("/>"):
             depth += 1
         if close_tag in trimmed:
             depth -= 1
@@ -303,6 +354,14 @@ def _find_mdx_close(lines: list[_Line], index: int, name: str) -> int | None:
         cursor += 1
 
     return None
+
+
+def _opens_tag(trimmed: str, prefix: str) -> bool:
+    """Whether a trimmed line opens the tag named by ``prefix`` (``<Tabs``)."""
+    if not trimmed.startswith(prefix):
+        return False
+    rest = trimmed[len(prefix) :]
+    return rest[:1] in {"", " ", "\t", "/", ">"}
 
 
 def build_units(blocks: list[Block]) -> list[_Unit]:
@@ -357,7 +416,11 @@ def _split_oversized(block: Block, text: str, max_chars: int) -> list[tuple[int,
             elif stripped.startswith("<") and not stripped.startswith("</"):
                 element_break = end
 
-        if blank_break is not None and blank_break > start and size(start, blank_break) >= max_chars * 0.4:
+        if (
+            blank_break is not None
+            and blank_break > start
+            and size(start, blank_break) >= max_chars * 0.4
+        ):
             end = blank_break
         if (
             element_break is not None
@@ -459,7 +522,6 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
                     end=end,
                     start_line=_line_number(line_starts, start),
                     end_line=_line_number(line_starts, max(start, end - 1)),
-                    headings=tuple(title for _, title in unit.headings),
                     context=context,
                     headings_with_levels=unit.headings,
                     starts_with_heading=first_block is not None
@@ -468,3 +530,12 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
                 )
             )
     return chunks
+
+
+__all__ = [
+    "Block",
+    "RawChunk",
+    "build_units",
+    "parse_blocks",
+    "split_text",
+]

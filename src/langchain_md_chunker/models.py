@@ -71,6 +71,12 @@ class Chunk:
     text: str
     content: str = ""
 
+    def __post_init__(self) -> None:
+        # ``content`` defaults to the source slice, so callers that never ask for
+        # heading prefixes cannot accidentally embed an empty string.
+        if not self.content:
+            object.__setattr__(self, "content", self.text)
+
     @property
     def chars(self) -> int:
         """Length of the chunk in characters."""
@@ -89,7 +95,7 @@ class Chunk:
             "headings": list(self.headings),
             "context": self.context,
             "text": self.text,
-            "content": self.content or self.text,
+            "content": self.content,
         }
 
     @classmethod
@@ -105,5 +111,13 @@ class Chunk:
             headings=tuple(str(item) for item in data.get("headings") or ()),
             context=str(data.get("context", "")),
             text=str(data.get("text", "")),
-            content=str(data.get("content") or data.get("text", "")),
+            content=str(data.get("content") or ""),
         )
+
+
+__all__ = [
+    "DEFAULT_SKIP_KINDS",
+    "DEFAULT_SKIP_PREFIXES",
+    "Chunk",
+    "ChunkConfig",
+]

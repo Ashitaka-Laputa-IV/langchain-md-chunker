@@ -35,7 +35,11 @@ STATIC_TYPES = {
 class ChunkStore:
     """Lazily (re)loads ``chunks.jsonl`` + ``manifest.json`` from disk."""
 
-    def __init__(self, chunks_dir: str | pathlib.Path, source_dir: str | pathlib.Path | None = None):
+    def __init__(
+        self,
+        chunks_dir: str | pathlib.Path,
+        source_dir: str | pathlib.Path | None = None,
+    ):
         self.dir = pathlib.Path(chunks_dir).expanduser().resolve()
         self.source_override = (
             pathlib.Path(source_dir).expanduser().resolve() if source_dir is not None else None
@@ -43,6 +47,8 @@ class ChunkStore:
         self.manifest: dict[str, Any] = {}
         self.chunks: list[dict[str, Any]] = []
         self.docs: dict[str, dict[str, int]] = {}
+        self.chunks_payload = b""
+        self.manifest_payload = b""
         self.source_root = self.dir
         self._signature: tuple[int, ...] | None = None
         self.reload(force=True)
@@ -97,11 +103,21 @@ class ChunkStore:
         self.chunks = chunks
         self.docs = docs
         self.source_root = self._resolve_source_root()
+        # Serialise once per reload: /api/chunks is ~2 MB and is requested on
+        # every page load, so re-encoding per request would be wasteful.
+        self.chunks_payload = json.dumps(
+            {"count": len(chunks), "chunks": chunks}, ensure_ascii=False
+        ).encode("utf-8")
+        self.manifest_payload = json.dumps(
+            {**manifest, **self.stats(), "docs": docs}, ensure_ascii=False
+        ).encode("utf-8")
 
     def _resolve_source_root(self) -> pathlib.Path:
         candidates = [
             self.source_override,
-            pathlib.Path(self.manifest["source_root"]) if self.manifest.get("source_root") else None,
+            pathlib.Path(self.manifest["source_root"])
+            if self.manifest.get("source_root")
+            else None,
             self.dir.parent / "langchain-docs",
         ]
         for candidate in candidates:
@@ -132,7 +148,7 @@ class DemoHandler(BaseHTTPRequestHandler):
     server_version = "chunk-demo/1.0"
     store: ChunkStore
 
-    def do_GET(self) -> None:  # noqa: N802 (http.server API)
+    def do_GET(self) -> None:
         parsed = urllib.parse.urlsplit(self.path)
         route = parsed.path
 
@@ -142,13 +158,16 @@ class DemoHandler(BaseHTTPRequestHandler):
             self._send_static(route.removeprefix("/static/"))
         elif route == "/api/manifest":
             self.store.reload()
-            payload = {**self.store.manifest, **self.store.stats(), "docs": self.store.docs}
-            self._send_json(payload)
+            self._send_bytes(self.store.manifest_payload, "application/json; charset=utf-8")
         elif route == "/api/chunks":
             self.store.reload()
-            self._send_json({"count": len(self.store.chunks), "chunks": self.store.chunks})
+            self._send_bytes(self.store.chunks_payload, "application/json; charset=utf-8")
         elif route == "/api/doc":
             self._send_doc(urllib.parse.parse_qs(parsed.query))
+        elif route == "/favicon.ico":
+            self.send_response(HTTPStatus.NO_CONTENT)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         else:
             self.send_error(HTTPStatus.NOT_FOUND, "Not Found")
 
@@ -160,16 +179,16 @@ class DemoHandler(BaseHTTPRequestHandler):
             return
         body = target.read_bytes()
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", STATIC_TYPES.get(target.suffix, "application/octet-stream"))
+        content_type = STATIC_TYPES.get(target.suffix, "application/octet-stream")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_json(self, payload: Any) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    def _send_bytes(self, body: bytes, content_type: str) -> None:
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
@@ -193,7 +212,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} {format % args}")
 
 

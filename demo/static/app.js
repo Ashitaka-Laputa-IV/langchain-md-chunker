@@ -8,6 +8,7 @@ const state = {
   manifest: {},
   docs: {},
   activeId: null,
+  activeRow: null,
   docCache: new Map(),
   requestToken: 0,
 };
@@ -72,6 +73,9 @@ function createRow(chunk, index) {
   const item = document.createElement("li");
   item.className = "chunk";
   item.dataset.id = chunk.id;
+  item.tabIndex = 0;
+  item.setAttribute("role", "button");
+  item.setAttribute("aria-label", `chunk ${index}: ${chunk.doc}`);
 
   const badge = document.createElement("button");
   badge.type = "button";
@@ -110,11 +114,16 @@ function renderList(list) {
   el.list.replaceChildren(fragment);
   el.listCount.textContent = `${list.length} 个 chunk`;
   el.empty.hidden = list.length > 0;
+  state.activeRow = null;
 }
 
 function markActive() {
-  for (const item of el.list.children) {
-    item.classList.toggle("active", item.dataset.id === state.activeId);
+  if (state.activeRow) {
+    state.activeRow.classList.remove("active");
+  }
+  state.activeRow = el.list.querySelector(`li[data-id="${state.activeId}"]`);
+  if (state.activeRow) {
+    state.activeRow.classList.add("active");
   }
 }
 
@@ -219,6 +228,14 @@ el.search.addEventListener("input", () => {
 el.list.addEventListener("click", (event) => {
   const item = event.target.closest("li[data-id]");
   if (item) openChunk(item.dataset.id);
+});
+
+el.list.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const item = event.target.closest("li[data-id]");
+  if (!item) return;
+  event.preventDefault();
+  openChunk(item.dataset.id);
 });
 
 window.addEventListener("hashchange", () => {

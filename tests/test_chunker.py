@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import ChunkConfig, Chunker, verify_chunks
+from langchain_md_chunker import Chunk, ChunkConfig, Chunker, verify_chunks
 
 
 def write(path: Path, text: str) -> Path:
@@ -81,8 +81,53 @@ def test_verify_chunks_passes_and_detects_tampering(tmp_path: Path) -> None:
     assert "超出文件长度" in problems[0]
 
 
+def test_chunk_without_content_defaults_to_text() -> None:
+    chunk = Chunk(
+        id="c1",
+        doc="a.md",
+        start=0,
+        end=4,
+        start_line=1,
+        end_line=1,
+        headings=("T",),
+        context="T",
+        text="body",
+    )
+
+    assert chunk.content == "body"
+    assert chunk.to_dict()["content"] == "body"
+
+
+def test_verify_chunks_reports_missing_source(tmp_path: Path) -> None:
+    body = "\n\n".join(["body " * 40] * 2)
+    target = write(tmp_path / "page.md", f"# T\n\n{body}\n")
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_file(target, root=tmp_path)
+    assert len(chunks) > 1
+    target.unlink()
+
+    problems = verify_chunks(chunks, tmp_path)
+
+    # 同一文档只报告一次，后续 chunk 不再重复读取
+    assert len(problems) == 1
+    assert "无法读取" in problems[0]
+
+
+def test_split_directory_orders_by_posix_path(tmp_path: Path) -> None:
+    write(tmp_path / "b.md", "# B\n\nb\n")
+    write(tmp_path / "a" / "z.md", "# Z\n\nz\n")
+    write(tmp_path / "a.md", "# A\n\na\n")
+
+    docs = [chunk.doc for chunk in Chunker().split_directory(tmp_path)]
+
+    # as_posix 排序："a.md" < "a/z.md" < "b.md"（Path 默认排序会先排子目录）
+    assert docs == ["a.md", "a/z.md", "b.md"]
+
+
 def test_unicode_offsets_are_code_points(tmp_path: Path) -> None:
-    text = "# \u6807\u9898\n\n\u4e2d\u6587\u6bb5\u843d\uff0c\u542b emoji \U0001F680 \u4e0e e\u0301\u3002\n"
+    text = (
+        "# \u6807\u9898\n\n"
+        "\u4e2d\u6587\u6bb5\u843d\uff0c\u542b emoji \U0001F680 \u4e0e e\u0301\u3002\n"
+    )
     target = write(tmp_path / "unicode.md", text)
     # UTF-8 字节数明显大于码点数，字节偏移不能直接当字符偏移用
     assert len(text.encode("utf-8")) > len(text)

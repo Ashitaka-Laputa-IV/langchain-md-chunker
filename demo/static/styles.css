@@ -152,6 +152,11 @@ body {
   background: var(--accent-soft);
 }
 
+.chunk:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .chunk.active {
   background: var(--accent-soft);
   border-left-color: var(--accent);
@@ -271,10 +276,6 @@ body {
   background: var(--mark);
   color: var(--mark-text);
   border-radius: 2px;
-}
-
-.placeholder {
-  color: var(--muted);
 }
 
 .toast {

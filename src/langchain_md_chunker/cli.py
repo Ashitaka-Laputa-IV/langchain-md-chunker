@@ -70,7 +70,11 @@ def main(argv: list[str] | None = None) -> int:
     started = time.perf_counter()
     chunker = Chunker(config)
     patterns = args.patterns or DEFAULT_PATTERNS
-    chunks = chunker.split_directory(source, patterns=patterns)
+    try:
+        chunks = chunker.split_directory(source, patterns=patterns)
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"错误：读取源文件失败（{exc}）", file=sys.stderr)
+        return 1
 
     if not chunks:
         print(
@@ -86,7 +90,11 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     manifest = build_manifest(chunks, source_root=source, config=config)
-    chunks_path, manifest_path = write_chunks(chunks, args.output, manifest=manifest)
+    try:
+        chunks_path, manifest_path = write_chunks(chunks, args.output, manifest=manifest)
+    except OSError as exc:
+        print(f"错误：写入 {args.output} 失败（{exc}）", file=sys.stderr)
+        return 1
     elapsed = time.perf_counter() - started
 
     if not args.quiet:

@@ -82,6 +82,11 @@ def test_preview_uses_content_when_present(tmp_path: Path) -> None:
     assert "content" not in store.chunks[0]
 
 
+def test_api_payloads_are_precomputed(store) -> None:
+    assert store.chunks_payload.startswith(b'{"count"')
+    assert json.loads(store.manifest_payload)["doc_count"] == 1
+
+
 def test_manifest_stats_are_served(store) -> None:
     assert json.dumps(store.stats())
     assert store.source_root.is_dir()

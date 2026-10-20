@@ -14,9 +14,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence, TextIO
+from typing import Any, TextIO
 
 from .models import Chunk, ChunkConfig
 
@@ -48,8 +49,10 @@ def write_chunks(
 ) -> tuple[Path, Path]:
     """Write chunks (and optionally a manifest) to ``out_dir``.
 
-    Files are replaced atomically: a concurrent reader (the demo server) either
-    sees the previous store or the new one, never a truncated file.
+    Each file is replaced atomically (temp file + :func:`os.replace`), so a
+    concurrent reader never sees a truncated file. The two files are replaced
+    one after the other, not in a single transaction: a reader that reloads in
+    between may briefly see new chunks next to the previous manifest.
     """
     directory = Path(out_dir)
     directory.mkdir(parents=True, exist_ok=True)
@@ -104,7 +107,7 @@ def build_manifest(
     sizes = [chunk.chars for chunk in chunks]
     return {
         "format_version": FORMAT_VERSION,
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "source_root": str(Path(source_root).resolve()),
         "config": {
             "max_chars": config.max_chars,

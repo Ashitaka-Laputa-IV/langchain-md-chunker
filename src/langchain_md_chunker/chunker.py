@@ -25,21 +25,16 @@ def _heading_prefix(raw: RawChunk) -> str:
         # The slice already opens with its own heading: only add the ancestors.
         headings = headings[:-1]
 
-    lines: list[str] = []
-    for level, title in headings:
-        title = title.strip()
-        if title:
-            lines.append(f"{'#' * max(1, min(level, 6))} {title}")
+    lines = [f"{'#' * level} {title.strip()}" for level, title in headings if title.strip()]
     return "\n".join(lines)
 
 
-def _build_content(raw: RawChunk, text: str, config: ChunkConfig) -> str:
+def _build_content(raw: RawChunk, body: str, config: ChunkConfig) -> str:
     """Chunk body, optionally prefixed with the heading path.
 
     ``Chunk.text`` stays an exact source slice; only ``Chunk.content`` may carry
     the synthesised heading prefix.
     """
-    body = text[raw.start : raw.end]
     if not config.include_headings:
         return body
     prefix = _heading_prefix(raw)
@@ -62,21 +57,24 @@ class Chunker:
 
     def split_text(self, text: str, *, doc: str = "<memory>") -> list[Chunk]:
         """Split in-memory text; ``doc`` is stored as the source identifier."""
-        return [
-            Chunk(
-                id=_chunk_id(doc, raw.start, raw.end),
-                doc=doc,
-                start=raw.start,
-                end=raw.end,
-                start_line=raw.start_line,
-                end_line=raw.end_line,
-                headings=raw.headings,
-                context=raw.context,
-                text=text[raw.start : raw.end],
-                content=_build_content(raw, text, self.config),
+        chunks: list[Chunk] = []
+        for raw in split_text(text, self.config):
+            body = text[raw.start : raw.end]
+            chunks.append(
+                Chunk(
+                    id=_chunk_id(doc, raw.start, raw.end),
+                    doc=doc,
+                    start=raw.start,
+                    end=raw.end,
+                    start_line=raw.start_line,
+                    end_line=raw.end_line,
+                    headings=raw.headings,
+                    context=raw.context,
+                    text=body,
+                    content=_build_content(raw, body, self.config),
+                )
             )
-            for raw in split_text(text, self.config)
-        ]
+        return chunks
 
     def split_file(self, path: str | Path, *, root: str | Path | None = None) -> list[Chunk]:
         """Split one file. ``doc`` becomes the path relative to ``root``."""
@@ -99,7 +97,10 @@ class Chunker:
         if not base.is_dir():
             raise NotADirectoryError(f"not a directory: {base}")
 
-        files: list[Path] = sorted({path for pattern in patterns for path in base.rglob(pattern)})
+        files: list[Path] = sorted(
+            {path for pattern in patterns for path in base.rglob(pattern)},
+            key=lambda path: path.as_posix(),
+        )
         chunks: list[Chunk] = []
         for file_path in files:
             chunks.extend(self.split_file(file_path, root=base))
@@ -107,15 +108,28 @@ class Chunker:
 
 
 def verify_chunks(chunks: Iterable[Chunk], root: str | Path) -> list[str]:
-    """Re-read sources from disk and check that every chunk matches its offsets."""
+    """Re-read sources from disk and check that every chunk matches its offsets.
+
+    Unreadable sources are reported as problems instead of raising, so one broken
+    file does not hide every other mismatch.
+    """
     base = Path(root)
-    cache: dict[str, str] = {}
+    texts: dict[str, str] = {}
+    unreadable: set[str] = set()
     problems: list[str] = []
 
     for chunk in chunks:
-        if chunk.doc not in cache:
-            cache[chunk.doc] = (base / chunk.doc).read_text(encoding="utf-8")
-        text = cache[chunk.doc]
+        if chunk.doc in unreadable:
+            continue
+        if chunk.doc not in texts:
+            try:
+                texts[chunk.doc] = (base / chunk.doc).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                unreadable.add(chunk.doc)
+                problems.append(f"{chunk.doc}: 无法读取源文件（{type(exc).__name__}）")
+                continue
+
+        text = texts[chunk.doc]
         if not 0 <= chunk.start < chunk.end <= len(text):
             problems.append(f"{chunk.id} {chunk.doc}: 偏移超出文件长度")
         elif text[chunk.start : chunk.end] != chunk.text:
