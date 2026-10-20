@@ -110,6 +110,7 @@ def build_manifest(
             "max_chars": config.max_chars,
             "skip_kinds": list(config.skip_kinds),
             "skip_prefixes": list(config.skip_prefixes),
+            "include_headings": config.include_headings,
         },
         "doc_count": len(docs),
         "chunk_count": len(chunks),

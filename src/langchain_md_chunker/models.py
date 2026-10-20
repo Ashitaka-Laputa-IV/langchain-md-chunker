@@ -29,11 +29,16 @@ class ChunkConfig:
         skip_kinds: Block kinds that are dropped instead of being chunked.
         skip_prefixes: Blocks whose stripped text starts with one of these
             prefixes are dropped as boilerplate.
+        include_headings: When true, ``Chunk.content`` is prefixed with the
+            section heading path (``# A`` / ``## B`` / ``### C``), which is
+            usually better input for embeddings. ``Chunk.text`` always stays an
+            exact slice of the source document.
     """
 
     max_chars: int = 1500
     skip_kinds: tuple[str, ...] = DEFAULT_SKIP_KINDS
     skip_prefixes: tuple[str, ...] = DEFAULT_SKIP_PREFIXES
+    include_headings: bool = False
 
     def __post_init__(self) -> None:
         if self.max_chars <= 0:
@@ -49,6 +54,10 @@ class Chunk:
     Offsets are half-open Unicode code point offsets into the decoded source
     text, i.e. ``source[start:end] == chunk.text`` always holds. Line numbers are
     1-based and inclusive.
+
+    ``content`` is what a consumer should embed or display: it equals ``text``
+    unless :attr:`ChunkConfig.include_headings` is enabled, in which case the
+    section heading path is prepended.
     """
 
     id: str
@@ -60,6 +69,7 @@ class Chunk:
     headings: tuple[str, ...]
     context: str
     text: str
+    content: str = ""
 
     @property
     def chars(self) -> int:
@@ -79,6 +89,7 @@ class Chunk:
             "headings": list(self.headings),
             "context": self.context,
             "text": self.text,
+            "content": self.content or self.text,
         }
 
     @classmethod
@@ -94,4 +105,5 @@ class Chunk:
             headings=tuple(str(item) for item in data.get("headings") or ()),
             context=str(data.get("context", "")),
             text=str(data.get("text", "")),
+            content=str(data.get("content") or data.get("text", "")),
         )

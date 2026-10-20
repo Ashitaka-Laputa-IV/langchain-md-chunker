@@ -120,3 +120,65 @@ def test_chunk_ids_are_stable_and_doc_scoped() -> None:
 def test_split_text_default_doc_and_empty_input() -> None:
     assert Chunker().split_text("# T\n\nbody\n")[0].doc == "<memory>"
     assert Chunker().split_text("") == []
+
+
+def test_content_equals_text_by_default() -> None:
+    chunks = Chunker().split_text("# 1\n\n## 2\n\n### 3\n\nxxxx\n")
+
+    assert chunks
+    assert all(chunk.content == chunk.text for chunk in chunks)
+
+
+def test_include_headings_does_not_duplicate_own_heading() -> None:
+    text = "# 1\n\n## 2\n\n### 3\n\nxxxx\n"
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_text(text)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == "### 3\n\nxxxx"
+    assert chunks[0].content == "# 1\n## 2\n\n### 3\n\nxxxx"
+
+
+def test_include_headings_prefixes_chunks_without_their_heading() -> None:
+    body = "\n\n".join(["a" * 100] * 3)
+    text = "# 1\n\n## 2\n\n" + body + "\n"
+    chunks = Chunker(ChunkConfig(max_chars=150, include_headings=True)).split_text(text)
+
+    assert len(chunks) >= 2
+    assert chunks[0].text.startswith("## 2")
+    assert chunks[0].content.startswith("# 1\n\n## 2")
+    assert not chunks[1].text.startswith("#")
+    assert chunks[1].content.startswith("# 1\n## 2\n\n")
+    assert chunks[1].content.endswith(chunks[1].text)
+
+
+def test_include_headings_keeps_original_heading_levels() -> None:
+    body = "\n\n".join(["b" * 100] * 2)
+    text = "# A\n\n### C\n\n" + body + "\n"
+    chunks = Chunker(ChunkConfig(max_chars=120, include_headings=True)).split_text(text)
+
+    later = [chunk for chunk in chunks if not chunk.text.startswith("#")]
+    assert later
+    assert later[0].content.startswith("# A\n### C\n\n")
+
+
+def test_include_headings_skips_empty_titles() -> None:
+    text = "# A\n\n## \n\n### C\n\nbody\n"
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_text(text)
+
+    assert len(chunks) == 1
+    assert chunks[0].content == "# A\n\n### C\n\nbody"
+
+
+def test_include_headings_without_headings_is_a_no_op() -> None:
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_text("just text\n")
+
+    assert chunks[0].content == chunks[0].text
+
+
+def test_include_headings_after_dropped_heading_resync() -> None:
+    text = "# 1\n\n## 2\n\nexport const x = 1;\n\nbody text\n"
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_text(text)
+
+    assert len(chunks) == 1
+    assert chunks[0].text == "body text"
+    assert chunks[0].content == "# 1\n## 2\n\nbody text"

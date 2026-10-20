@@ -7,7 +7,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from .models import Chunk, ChunkConfig
-from .splitter import split_text
+from .splitter import RawChunk, split_text
 
 #: Default file patterns understood by :meth:`Chunker.split_directory`.
 DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx")
@@ -16,6 +16,34 @@ DEFAULT_PATTERNS: tuple[str, ...] = ("*.md", "*.mdx")
 def _chunk_id(doc: str, start: int, end: int) -> str:
     digest = hashlib.sha1(f"{doc}\0{start}\0{end}".encode()).hexdigest()
     return f"c{digest[:11]}"
+
+
+def _heading_prefix(raw: RawChunk) -> str:
+    """Rebuild the section path as markdown headings (``# A`` / ``## B``)."""
+    headings = raw.headings_with_levels
+    if raw.starts_with_heading and headings:
+        # The slice already opens with its own heading: only add the ancestors.
+        headings = headings[:-1]
+
+    lines: list[str] = []
+    for level, title in headings:
+        title = title.strip()
+        if title:
+            lines.append(f"{'#' * max(1, min(level, 6))} {title}")
+    return "\n".join(lines)
+
+
+def _build_content(raw: RawChunk, text: str, config: ChunkConfig) -> str:
+    """Chunk body, optionally prefixed with the heading path.
+
+    ``Chunk.text`` stays an exact source slice; only ``Chunk.content`` may carry
+    the synthesised heading prefix.
+    """
+    body = text[raw.start : raw.end]
+    if not config.include_headings:
+        return body
+    prefix = _heading_prefix(raw)
+    return f"{prefix}\n\n{body}" if prefix else body
 
 
 class Chunker:
@@ -45,6 +73,7 @@ class Chunker:
                 headings=raw.headings,
                 context=raw.context,
                 text=text[raw.start : raw.end],
+                content=_build_content(raw, text, self.config),
             )
             for raw in split_text(text, self.config)
         ]

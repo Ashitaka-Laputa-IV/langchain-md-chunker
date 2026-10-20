@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import Chunker, write_chunks
+from langchain_md_chunker import ChunkConfig, Chunker, write_chunks
 
 SERVER_PATH = Path(__file__).resolve().parents[1] / "demo" / "server.py"
 
@@ -67,6 +67,19 @@ def test_reload_picks_up_new_store(store, tmp_path: Path) -> None:
     store.reload()
 
     assert store.has_doc("second.md")
+
+
+def test_preview_uses_content_when_present(tmp_path: Path) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "page.md").write_text("# 1\n\n## 2\n\nbody\n", encoding="utf-8")
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_directory(docs)
+    write_chunks(chunks, tmp_path / "chunks", manifest={"source_root": str(docs)})
+
+    store = demo.ChunkStore(tmp_path / "chunks")
+
+    assert store.chunks[0]["preview"].startswith("# 1")
+    assert "content" not in store.chunks[0]
 
 
 def test_manifest_stats_are_served(store) -> None:

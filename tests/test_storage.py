@@ -110,6 +110,32 @@ def test_build_manifest_summarises() -> None:
     assert manifest["config"]["skip_prefixes"]
 
 
+def test_content_roundtrip(tmp_path: Path) -> None:
+    chunks = Chunker(ChunkConfig(include_headings=True)).split_text(
+        "# 1\n\n## 2\n\nbody text\n", doc="a.md"
+    )
+
+    write_chunks(chunks, tmp_path)
+    restored = read_chunks(tmp_path)
+
+    assert restored == chunks
+    assert restored[0].content.startswith("# 1")
+
+
+def test_from_dict_defaults_content_to_text() -> None:
+    payload = {
+        "id": "c1",
+        "doc": "a.md",
+        "start": 0,
+        "end": 4,
+        "headings": ["T"],
+        "context": "T",
+        "text": "body",
+    }
+
+    assert Chunk.from_dict(payload).content == "body"
+
+
 def test_chunk_dict_roundtrip() -> None:
     chunk = make_chunks()[0]
 

@@ -51,7 +51,14 @@ class Block:
 
 @dataclass(frozen=True, slots=True)
 class RawChunk:
-    """A chunk before it is bound to a document path."""
+    """A chunk before it is bound to a document path.
+
+    ``headings_with_levels`` keeps the original heading depth so a caller can
+    rebuild the section path verbatim (``# A`` / ``## B`` / ``### C``).
+    ``starts_with_heading`` is true when the chunk slice already begins with its
+    own section heading, in which case that heading must not be duplicated when
+    embedding the path into the chunk content.
+    """
 
     start: int
     end: int
@@ -59,6 +66,8 @@ class RawChunk:
     end_line: int
     headings: tuple[str, ...]
     context: str
+    headings_with_levels: tuple[tuple[int, str], ...] = ()
+    starts_with_heading: bool = False
 
 
 @dataclass(slots=True)
@@ -71,7 +80,7 @@ class _Line:
 
 @dataclass(slots=True)
 class _Unit:
-    headings: tuple[str, ...]
+    headings: tuple[tuple[int, str], ...]
     blocks: list[Block] = field(default_factory=list)
 
 
@@ -307,7 +316,7 @@ def build_units(blocks: list[Block]) -> list[_Unit]:
             while stack and stack[-1][0] >= block.level:
                 stack.pop()
             stack.append((block.level, block.title))
-            current = _Unit(tuple(title for _, title in stack), [block])
+            current = _Unit(tuple(stack), [block])
             units.append(current)
             continue
         if current is None:
@@ -439,7 +448,8 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
 
     chunks: list[RawChunk] = []
     for unit in build_units(parse_blocks(text)):
-        context = " > ".join(unit.headings)
+        context = " > ".join(title for _, title in unit.headings)
+        first_block = unit.blocks[0] if unit.blocks else None
         for start, end in _emit_unit(unit, text, settings):
             if not text[start:end].strip():  # pragma: no cover - blocks are never blank
                 continue
@@ -449,8 +459,12 @@ def split_text(text: str, config: ChunkConfig | None = None) -> list[RawChunk]:
                     end=end,
                     start_line=_line_number(line_starts, start),
                     end_line=_line_number(line_starts, max(start, end - 1)),
-                    headings=unit.headings,
+                    headings=tuple(title for _, title in unit.headings),
                     context=context,
+                    headings_with_levels=unit.headings,
+                    starts_with_heading=first_block is not None
+                    and first_block.kind == "heading"
+                    and first_block.start == start,
                 )
             )
     return chunks

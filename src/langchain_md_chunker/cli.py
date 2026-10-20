@@ -31,6 +31,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-chars", type=int, default=1500, help="单个 chunk 的目标上限字符数")
     parser.add_argument(
+        "--include-headings",
+        action="store_true",
+        help="在 chunk 的 content 前拼接所属标题路径（# A / ## B / ### C）",
+    )
+    parser.add_argument(
         "-p",
         "--pattern",
         dest="patterns",
@@ -55,7 +60,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        config = ChunkConfig(max_chars=args.max_chars)
+        config = ChunkConfig(
+            max_chars=args.max_chars, include_headings=args.include_headings
+        )
     except ValueError as exc:
         print(f"错误：{exc}", file=sys.stderr)
         return 2

@@ -94,3 +94,18 @@ def test_random_documents_keep_invariants(max_chars: int) -> None:
     rng = random.Random(20261020 + max_chars)
     for _ in range(60):
         check(make_doc(rng), ChunkConfig(max_chars=max_chars))
+
+
+@pytest.mark.parametrize("max_chars", [30, 400])
+def test_include_headings_only_prepends_heading_lines(max_chars: int) -> None:
+    rng = random.Random(7 + max_chars)
+    config = ChunkConfig(max_chars=max_chars, include_headings=True)
+    for _ in range(40):
+        text = make_doc(rng)
+        for chunk in Chunker(config).split_text(text):
+            assert chunk.content.endswith(chunk.text)
+            prefix = chunk.content[: len(chunk.content) - len(chunk.text)]
+            if prefix:
+                assert prefix.endswith("\n\n")
+                for line in prefix.rstrip("\n").split("\n"):
+                    assert line.startswith("#")

@@ -80,7 +80,8 @@ class ChunkStore:
                         continue
                     raw = json.loads(line)
                     text = raw.pop("text", "")
-                    raw["preview"] = re.sub(r"\s+", " ", text).strip()[:PREVIEW_CHARS]
+                    content = raw.pop("content", "") or text
+                    raw["preview"] = re.sub(r"\s+", " ", content).strip()[:PREVIEW_CHARS]
                     chunks.append(raw)
                     doc = docs.setdefault(raw["doc"], {"chunks": 0, "chars": 0})
                     doc["chunks"] += 1

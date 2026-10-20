@@ -56,6 +56,22 @@ def test_cli_max_chars_changes_granularity(tmp_path: Path) -> None:
     assert chunk_count(default_out) >= 1
 
 
+def test_cli_include_headings(tmp_path: Path) -> None:
+    source = make_tree(tmp_path)
+    out = tmp_path / "out"
+
+    assert cli.main([str(source), "-o", str(out), "--include-headings", "--max-chars", "120"]) == 0
+
+    records = [
+        __import__("json").loads(line)
+        for line in (out / CHUNKS_FILE).read_text(encoding="utf-8").splitlines()
+    ]
+    assert len(records) > 1
+    assert records[0]["content"] == records[0]["text"]
+    assert all(record["content"].startswith("# Title\n\n") for record in records[1:])
+    assert all(record["content"].endswith(record["text"]) for record in records)
+
+
 def test_cli_pattern_option(tmp_path: Path) -> None:
     source = make_tree(tmp_path)
     (source / "page.mdx").write_text(DOC, encoding="utf-8")
