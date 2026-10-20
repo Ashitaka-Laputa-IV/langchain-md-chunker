@@ -9,6 +9,7 @@
 - **偏移精确**：chunk 是原文的精确切片，`source[start:end] == chunk.text` 恒成立（切分只挑断点，不改写、不拼接、不重复内容）。
 - **MDX 感知**：跳过 frontmatter 与 `export const ...` 代码块；把 `<Tabs>`、`<CodeGroup>`、`<Accordion>` 等组件当作整体；代码围栏不会被腰斩。
 - **标题感知**：按标题层级分节，chunk 携带该节的标题路径（如 `LangChain > Agents > Middleware`）作为上下文。
+- **标题可写入正文**（可选）：`--include-headings` 会把标题路径按原层级拼进 `content`，更适合 embedding；`text` 仍保持精确切片。
 - **可调参数**：目标长度、要丢弃的块类型/样板前缀均可配置。
 
 ## 快速开始
@@ -23,15 +24,16 @@ uv run python demo/server.py                   # 打开 http://127.0.0.1:8000 �
 ## 切分命令
 
 ```bash
-uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--verify]
+uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--include-headings] [--verify]
 ```
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `INPUT` | `data/langchain-docs` | 源文档目录 |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
-| `--max-chars` | `1500` | 单 chunk 目标上限（字符） |
+| `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
 | `-p, --pattern` | `*.md`, `*.mdx` | 文件匹配模式，可重复 |
+| `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
 | `--verify` | 关闭 | 写盘前回读源文件，逐条校验偏移 |
 
 输出：
@@ -61,7 +63,8 @@ data/chunks/
   "chars": 1360,
   "headings": ["Context overview", "Context engineering"],
   "context": "Context overview > Context engineering",
-  "text": "## Context engineering\n\n..."
+  "text": "## Context engineering\n\n...",
+  "content": "# Context overview\n\n## Context engineering\n\n..."
 }
 ```
 
@@ -75,9 +78,47 @@ data/chunks/
 | `headings` | 标题路径（由外到内） |
 | `context` | `headings` 用 ` > ` 拼接，可直接拼到 embedding 输入前 |
 | `text` | 原文切片，逐字符等于 `source[start:end]` |
+| `content` | 用于 embedding / 展示的文本：默认等于 `text`，开启 `include_headings` 后是“标题路径 + 空行 + text” |
 
 > 偏移以码点计（Python `str` 下标）。JavaScript 字符串是 UTF-16，跨码点时需
 > `Array.from(text)` 后再切片——`demo/static/app.js` 已这样做。
+
+## 标题前缀（可选）
+
+默认关闭。开启后，每个 chunk 的 `content` 会按**原文层级**带上它所在的标题路径：
+
+输入：
+
+```markdown
+# 1
+
+## 2
+
+### 3
+
+xxxxx
+```
+
+输出（该 chunk 只有 `xxxxx` 一个正文块）：
+
+```text
+text    = "### 3\n\nxxxxx"
+content = "# 1\n## 2\n\n### 3\n\nxxxxx"
+```
+
+规则：
+
+- chunk 已经包含自身标题行时**不会重复**，只补祖先标题；
+- 层级按原文保留（`# A` 下直接 `### C` 就输出 `# A` + `### C`，不臆造层级）；
+- 空标题跳过；无标题的文档 `content == text`；
+- `start / end / chars / 行号` 始终描述 `text`（原文切片），`--max-chars` 也只约束原文长度；
+  实测语料上 `content` 平均比 `text` 多 43 字符（最大 137）。
+
+```bash
+uv run chunk --include-headings --verify      # 语料产物带标题前缀
+# 或
+Chunker(ChunkConfig(include_headings=True))
+```
 
 ## 切分策略
 
@@ -96,7 +137,7 @@ from pathlib import Path
 
 from langchain_md_chunker import Chunker, ChunkConfig
 
-chunker = Chunker(ChunkConfig(max_chars=1200))
+chunker = Chunker(ChunkConfig(max_chars=1200, include_headings=True))
 
 chunks = chunker.split_directory("data/langchain-docs")   # 或 split_file / split_text
 source = Path("data/langchain-docs", chunks[0].doc).read_text(encoding="utf-8")
@@ -125,7 +166,7 @@ manifest = read_manifest("data/chunks")
 uv run python demo/server.py --port 8000
 ```
 
-- 左侧按源文件顺序列出 `[序号] 预览`，支持按路径 / 标题 / 正文过滤；
+- 左侧按源文件顺序列出 `[序号] 预览`，支持按路径 / 标题 / 预览片段过滤；预览取自 `content`，开启 `--include-headings` 后可直接看到标题前缀；
 - 点击任意 `[序号]`，右侧直接渲染源文件并高亮该 chunk，自动滚动到高亮位置；
 - 顶部显示文档路径、字符偏移、行号、标题路径，可另开原始文件；
 - URL 形如 `http://127.0.0.1:8000/#c32352242f27`，可直接分享某个 chunk。
@@ -160,7 +201,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 78 项，秒级
+uv run pytest                       # 95 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 ```
 
