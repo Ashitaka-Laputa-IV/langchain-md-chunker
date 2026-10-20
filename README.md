@@ -9,7 +9,7 @@
 - **偏移精确**：chunk 是原文的精确切片，`source[start:end] == chunk.text` 恒成立（切分只挑断点，不改写、不拼接、不重复内容）。
 - **MDX 感知**：跳过 frontmatter 与 `export const ...` 代码块；把 `<Tabs>`、`<CodeGroup>`、`<Accordion>` 等组件当作整体；代码围栏不会被腰斩。
 - **标题感知**：按标题层级分节，chunk 携带该节的标题路径（如 `LangChain > Agents > Middleware`）作为上下文。
-- **可调参数**：目标长度、合并阈值、要丢弃的块类型/样板前缀均可配置。
+- **可调参数**：目标长度、要丢弃的块类型/样板前缀均可配置。
 
 ## 快速开始
 
@@ -23,7 +23,7 @@ uv run python demo/server.py                   # 打开 http://127.0.0.1:8000 �
 ## 切分命令
 
 ```bash
-uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [--min-chars 250] [-p '*.md'] [--verify]
+uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [-p '*.md'] [--verify]
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -31,7 +31,6 @@ uv run chunk [INPUT] [-o OUTPUT] [--max-chars 1500] [--min-chars 250] [-p '*.md'
 | `INPUT` | `data/langchain-docs` | 源文档目录 |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符） |
-| `--min-chars` | `250` | 过小 chunk 的合并阈值 |
 | `-p, --pattern` | `*.md`, `*.mdx` | 文件匹配模式，可重复 |
 | `--verify` | 关闭 | 写盘前回读源文件，逐条校验偏移 |
 
@@ -82,8 +81,8 @@ data/chunks/
 
 1. **分块**：逐行扫描，识别标题、代码围栏（``` / ~~~）、表格、引用、MDX 组件、列表、段落、分隔线、frontmatter、`export` 块。
 2. **分节**：按标题层级构造标题栈，每个 chunk 归属唯一一节，并带上该节标题路径。
-3. **打包**：同节内按块贪心累积到 `max_chars`；小于 `min_chars` 的 chunk 会并入相邻 chunk（前提是合并后仍不超限）。
-4. **超大块**：单个块超过上限时按行切分，优先在空行处断开；代码块可能因此被切开，但偏移依然精确。
+3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。
+4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；代码/组件可能因此被切开，但偏移依然精确。
 5. **丢弃**：`skip_kinds`（frontmatter / export）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。
 
 **已知限制**：标题行会与正文首块绑定；若正文是单个不可拆的巨型块（超长单行代码、大组件），该 chunk 可能超过 `max_chars`。默认语料中此类情况约占 0.1%。
@@ -95,7 +94,7 @@ from pathlib import Path
 
 from langchain_md_chunker import Chunker, ChunkConfig
 
-chunker = Chunker(ChunkConfig(max_chars=1200, min_chars=200))
+chunker = Chunker(ChunkConfig(max_chars=1200))
 
 chunks = chunker.split_directory("data/langchain-docs")   # 或 split_file / split_text
 source = Path("data/langchain-docs", chunks[0].doc).read_text(encoding="utf-8")
@@ -144,17 +143,34 @@ src/langchain_md_chunker/
 demo/
 ├── server.py       # 演示服务（stdlib）
 └── static/         # index.html / app.js / styles.css
-tests/test_splitter.py
+tests/
+├── conftest.py         # 语料 fixture（全量切分只跑一次）
+├── test_parser.py      # 围栏/表格/MDX/引用等解析边界
+├── test_splitter.py    # 打包、标题上下文、超长块、样板剔除
+├── test_chunker.py     # 文件/目录 API、编码（Unicode、CRLF）、校验、幂等
+├── test_storage.py     # JSONL / manifest 往返
+├── test_cli.py         # 命令行端到端与退出码
+└── test_package.py     # 包入口与公开 API
 data/download_docs.py
 ```
 
 ## 测试
 
 ```bash
-uv run pytest
+uv run pytest                       # 62 项，秒级
+uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 ```
 
-测试覆盖：偏移精确性、标题路径、代码围栏、超长块切分、样板剔除、幂等边界；语料存在时还会校验全量 chunk 不重叠、不越界、长度分布合理。
+当前覆盖率：核心包 100% 行 / 100% 分支（`uv run pytest --cov` 可复现）。
+
+测试关注的是**不变量**而不是实现细节：
+
+- chunk 切片等于源文件 `[start, end)`，且行号、标题路径、上下文自洽；
+- 代码围栏、表格、MDX 组件不会被“半个标签”切断，围栏内的 `#` 不当标题；
+- Unicode（非 BMP 字符）、CRLF 文件的偏移按码点而非字节；
+- 文件/目录 API 的 `doc` 路径、排序稳定性与 `verify_chunks` 的负例；
+- CLI 退出码、`--verify` 失败、`--max-chars`/`-p` 生效；
+- 语料存在时对全量 4500+ chunk 校验：不重叠、不越界、ID 唯一、超长块占比 < 1%。
 
 ## 版权
 
