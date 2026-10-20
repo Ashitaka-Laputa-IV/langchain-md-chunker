@@ -216,3 +216,23 @@ def test_blocks_are_ordered_and_non_overlapping() -> None:
         assert previous.end <= current.start
     for block in blocks:
         assert text[block.start : block.end].strip()
+
+def test_setext_headings() -> None:
+    text = "Title\n=====\n\nbody\n\nSub\n---\n\nmore\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["heading", "para", "heading", "para"]
+    assert [(block.level, block.title) for block in blocks if block.kind == "heading"] == [
+        (1, "Title"),
+        (2, "Sub"),
+    ]
+    assert text[blocks[0].start : blocks[0].end] == "Title\n====="
+
+
+def test_setext_underline_after_blank_line_is_a_rule() -> None:
+    text = "para\n\n---\n\nnext\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["para", "rule", "para"]
+
+

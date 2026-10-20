@@ -44,7 +44,7 @@ uv build
 uvx --from twine twine check dist/*
 
 # 4. 安装产物做冒烟测试（别只测 editable 安装）
-uv venv /tmp/pkg-smoke --python 3.13
+uv venv /tmp/pkg-smoke --python 3.11   # 冒烟测试最低支持版本
 uv pip install --python /tmp/pkg-smoke/bin/python dist/*.whl
 /tmp/pkg-smoke/bin/chunk --help
 /tmp/pkg-smoke/bin/python - <<'PY'

@@ -26,6 +26,7 @@ from langchain_md_chunker import Chunker, ChunkConfig, Chunk, langchain_docs
 | `langchain_md_chunker.models` | 输出模型 `Chunk` | [models.md](models.md) |
 | `langchain_md_chunker.storage` | JSONL + manifest 读写、统计 | [storage.md](storage.md) |
 | `langchain_md_chunker.verify` | 回读源文件校验偏移 | [verify.md](verify.md) |
+| `langchain_md_chunker.integrations` | 可选适配器（LangChain `Document`） | [integrations.md](integrations.md) |
 | `langchain_md_chunker.cli` | 命令行 `uv run chunk` | [cli.md](cli.md) |
 
 ## 三个常见任务
@@ -66,7 +67,7 @@ problems = verify_chunks(chunks, "data/langchain-docs")   # [] 表示全部一�
 ```text
 CHUNKS_FILE  DEFAULT_PATTERNS  MANIFEST_FILE  Chunk  ChunkConfig  Chunker
 __version__  build_manifest  langchain_docs  read_chunks  read_manifest
-verify_chunks  write_chunks
+to_langchain_documents  verify_chunks  write_chunks
 ```
 
 其中 `__version__` 是包版本号（当前 `0.1.0`）。

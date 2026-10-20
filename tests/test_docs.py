@@ -9,7 +9,16 @@ from types import ModuleType
 import pytest
 
 import langchain_md_chunker
-from langchain_md_chunker import chunker, cli, config, models, presets, storage, verify
+from langchain_md_chunker import (
+    chunker,
+    cli,
+    config,
+    integrations,
+    models,
+    presets,
+    storage,
+    verify,
+)
 
 DOCS_DIR = Path(__file__).resolve().parents[1] / "docs" / "api"
 
@@ -17,6 +26,7 @@ MODULES: dict[str, ModuleType] = {
     "chunker": chunker,
     "cli": cli,
     "config": config,
+    "integrations": integrations,
     "models": models,
     "presets": presets,
     "storage": storage,

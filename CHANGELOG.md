@@ -5,6 +5,20 @@
 
 ## [Unreleased]
 
+### 变更
+
+- 最低 Python 版本从 3.13 降至 **3.11**，并补充 3.11 / 3.12 classifier。
+- 解析器支持 **Setext 标题**（`===` / `---` 下划线形式）。
+
+### 新增
+
+- `to_langchain_documents()`：可选适配 `langchain-core` 的 `Document`，惰性导入，不增加运行时依赖。
+
+### 文档
+
+- README 补充已知限制：字符（非 token）长度、无 overlap、缩进代码、列表内围栏、单线程 IO、码点偏移。
+- 新增 `docs/api/integrations.md`。
+
 ## [0.1.0] - 2026-10-20
 
 首个版本。

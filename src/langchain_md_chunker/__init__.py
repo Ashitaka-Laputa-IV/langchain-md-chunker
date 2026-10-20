@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from .chunker import DEFAULT_PATTERNS, Chunker
 from .config import ChunkConfig
+from .integrations import to_langchain_documents
 from .models import Chunk
 from .presets import langchain_docs
 from .storage import (
@@ -43,6 +44,7 @@ __all__ = [
     "langchain_docs",
     "read_chunks",
     "read_manifest",
+    "to_langchain_documents",
     "verify_chunks",
     "write_chunks",
 ]

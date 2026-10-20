@@ -27,6 +27,7 @@ MDX_OPEN_RE = re.compile(r"^<(?P<name>[A-Za-z][\w.:-]*)(?:[ \t/>]|$)")
 RULE_RE = re.compile(
     r"^ {0,3}(?:\*[ \t]*){3,}$|^ {0,3}(?:-[ \t]*){3,}$|^ {0,3}(?:_[ \t]*){3,}$"
 )
+SETEXT_RE = re.compile(r"^ {0,3}(?P<marks>=+|-+)[ \t]*$")
 
 
 EXPORT_RE = re.compile(
@@ -138,6 +139,17 @@ def parse_blocks(text: str) -> list[Block]:
 
         kind = "list" if LIST_RE.match(source) else "para"
         end = _end_of_paragraph(lines, index)
+        if kind == "para" and end + 1 < total:
+            level = _setext_level(lines[end + 1].text)
+            if level is not None:
+                title = " ".join(
+                    lines[position].text.strip() for position in range(index, end + 1)
+                ).strip()
+                blocks.append(
+                    Block("heading", line.start, lines[end + 1].end, level=level, title=title)
+                )
+                index = end + 2
+                continue
         blocks.append(Block(kind, line.start, lines[end].end))
         index = end + 1
 
@@ -217,6 +229,7 @@ def _end_of_paragraph(lines: list[Line], index: int) -> int:
             or FENCE_RE.match(following)
             or EXPORT_RE.match(following)
             or following.startswith("<")
+            or _setext_level(following) is not None
         ):
             break
         end += 1
@@ -230,6 +243,14 @@ def _is_closing_fence(line: str, char: str, minimum: int) -> bool:
         return False
     body = stripped.rstrip(" \t")
     return len(body) >= minimum and set(body) == {char}
+
+
+def _setext_level(text: str) -> int | None:
+    """Heading level of a Setext underline (``===`` -> 1, ``---`` -> 2)."""
+    match = SETEXT_RE.match(text)
+    if match is None:
+        return None
+    return 1 if match.group("marks")[0] == "=" else 2
 
 
 def _read_fence(

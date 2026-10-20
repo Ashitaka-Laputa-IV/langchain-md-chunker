@@ -17,6 +17,7 @@ def test_public_api_is_exported() -> None:
         "build_manifest",
         "read_manifest",
         "langchain_docs",
+        "to_langchain_documents",
     ):
         assert hasattr(langchain_md_chunker, name)
         assert name in langchain_md_chunker.__all__

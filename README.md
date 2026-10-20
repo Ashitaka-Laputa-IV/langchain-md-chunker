@@ -148,13 +148,21 @@ Chunker(ChunkConfig(include_headings=True))
 
 ## 切分策略
 
-1. **分块**：逐行扫描，识别标题、代码围栏（``` / ~~~）、表格、引用、MDX 组件、列表、段落、分隔线、frontmatter、`export` 块。
+1. **分块**：逐行扫描，识别标题（ATX 与 Setext）、代码围栏（``` / ~~~）、表格、引用、MDX 组件、列表、段落、分隔线、frontmatter、`export` 块。
 2. **分节**：按标题层级构造标题栈，每个 chunk 归属唯一一节，并带上该节标题路径。
 3. **打包**：同节内按块贪心累积到 `max_chars`，超出才断点；标题行始终与其正文首块同行。
 4. **超大块**：单个块超过上限时按行切分，优先落在子元素起始行（如 `<Tab>`、`<Step>`），其次空行，最后才选普通行；代码/组件可能因此被切开，但偏移依然精确。
 5. **丢弃**：`skip_kinds`（frontmatter / export）与 `skip_prefixes`（LangChain 文档每页重复的索引横幅与页脚）不产出 chunk；它们会强制断开，避免混进相邻 chunk。`export` 块按大括号配平整段跳过（文档里的 `PatternEmbed` 组件有 45 KB），并以标题/围栏为安全边界，绝不会吞掉正文。
 
-**已知限制**：标题行会与正文首块绑定；若正文是单个不可拆的巨型块（超长单行代码、大组件），该 chunk 可能超过 `max_chars`。默认语料中此类情况约占 0.1%。
+**已知限制与设计取舍**：
+
+- 标题行会与正文首块绑定；若正文是单个不可拆的巨型块（超长单行代码、大组件），该 chunk 可能超过 `max_chars`。默认语料中约占 0.1%。
+- `max_chars` 按**字符**而非 token 计量：中英文密度不同，需要 token 预算时请按语料换算后调整。
+- 相邻 chunk **不重叠**：这是“偏移精确、可回溯”的刻意取舍；需要 overlap 的检索策略请在消费端处理。
+- 不支持 4 空格缩进代码块：文档中的缩进更常表示 MDX 组件或列表续行，误判代价高于收益；代码请使用围栏。
+- 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）。
+- `split_directory` 是单线程同步 IO；5 MB 语料约 0.5 s，更大规模建议按目录分片。
+- 偏移按 Unicode 码点；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
 
 ## Python API
 
@@ -184,8 +192,17 @@ chunks = read_chunks("data/chunks")          # 目录或 .jsonl 均可
 manifest = read_manifest("data/chunks")
 ```
 
+与 LangChain 集成（可选，自行安装 `langchain-core`）：
+
+```python
+from langchain_md_chunker import to_langchain_documents
+
+documents = to_langchain_documents(chunks)          # page_content 默认取 content
+documents = to_langchain_documents(chunks, page_content="text")   # 精确原文
+```
+
 公开 API 即 `langchain_md_chunker.__all__`：`Chunker`、`ChunkConfig`、`Chunk`、`langchain_docs`、
-`verify_chunks`、`write_chunks`、`read_chunks`、`build_manifest`、`read_manifest` 及文件常量。
+`to_langchain_documents`、`verify_chunks`、`write_chunks`、`read_chunks`、`build_manifest`、`read_manifest` 及文件常量。
 解析层（`blocks.py`）与切分层（`splitter.py`）属于内部实现，不作为兼容性承诺；
 完整的公开接口清单见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/blob/main/docs/api/index.md)。
 
@@ -239,7 +256,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 134 项，秒级
+uv run pytest                       # 142 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```
