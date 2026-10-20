@@ -99,8 +99,9 @@ def build_manifest(
 | 字段 | 说明 |
 | --- | --- |
 | `format_version` | 当前为 `1` |
-| `generated_at` | UTC 时间戳（秒级），仅用于排查，不参与切分 |
-| `source_root` | 源目录的**绝对路径** |
+| `generated_at` | UTC 时间戳（秒级），仅用于排查；设置 `SOURCE_DATE_EPOCH` 时使用该时间，便于可复现构建 |
+| `source_root` | 源目录；在当前工作目录内时写相对路径（跨机器可复现，不泄露本地绝对路径） |
+| `package_version` | 生成该索引的 `langchain-md-chunker` 版本 |
 | `config.max_chars` | 切分上限 |
 | `config.skip_kinds` | 丢弃的块类型 |
 | `config.skip_prefixes` | 丢弃的样板前缀 |

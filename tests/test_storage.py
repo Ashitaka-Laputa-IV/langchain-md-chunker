@@ -105,7 +105,8 @@ def test_build_manifest_summarises() -> None:
     assert manifest["chunk_count"] == len(chunks)
     assert manifest["total_chars"] == sum(chunk.chars for chunk in chunks)
     assert manifest["chunk_chars_min"] <= manifest["chunk_chars_avg"] <= manifest["chunk_chars_max"]
-    assert Path(manifest["source_root"]).is_absolute()
+    assert manifest["source_root"] == "data/langchain-docs"
+    assert manifest["package_version"]
     assert manifest["config"]["max_chars"] == 120
     assert "skip_prefixes" in manifest["config"]
 
@@ -158,3 +159,32 @@ def test_manifest_records_the_full_config(tmp_path: Path) -> None:
     assert manifest["config"]["min_chars"] == 50
     assert manifest["config"]["merge_small_sections"] is True
     assert manifest["config"]["id_strategy"] == "content"
+
+
+def test_manifest_version_and_relative_source_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    monkeypatch.chdir(tmp_path)
+    chunks = Chunker().split_text("# T\n\nbody\n", doc="page.md")
+
+    manifest = build_manifest(chunks, source_root=docs, config=ChunkConfig())
+
+    assert manifest["source_root"] == "docs"
+    assert manifest["package_version"]
+
+
+def test_manifest_timestamp_honours_source_date_epoch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "1700000000")
+    chunks = Chunker().split_text("# T\n\nbody\n", doc="a.md")
+
+    manifest = build_manifest(chunks, source_root=tmp_path, config=ChunkConfig())
+
+    assert manifest["generated_at"].startswith("2023-11-14T22:13:20")
+
+    monkeypatch.setenv("SOURCE_DATE_EPOCH", "not-a-number")
+    fallback = build_manifest(chunks, source_root=tmp_path, config=ChunkConfig())
+    assert fallback["generated_at"]

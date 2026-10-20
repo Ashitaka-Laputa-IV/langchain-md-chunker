@@ -16,13 +16,17 @@ from langchain_md_chunker.presets import LANGCHAIN_DOCS_SKIP_PREFIXES
 LANGCHAIN_DOCS_SKIP_PREFIXES: tuple[str, ...] = (
     "> ## Documentation Index",
     '<div className="source-links">',
+    "<a id=",
 )
 ```
 
-LangChain 官方文档每页都会出现的两块样板，没有检索价值：
+LangChain 官方文档每页都会出现的几类样板，没有检索价值：
 
 - 页首的 `Documentation Index` 引用横幅；
-- 页尾的 `source-links` 区块（“连接文档 / 编辑本页”链接）。
+- 页尾的 `source-links` 区块（“连接文档 / 编辑本页”链接）；
+- 无正文内容的页面锚点 `<a id=... />`。
+
+此外预设会跳过 `rule` 块（`***` 分隔线），它不携带可检索文本。
 
 ## `langchain_docs`
 
@@ -42,6 +46,7 @@ def langchain_docs(
 ```python
 ChunkConfig(
     max_chars=max_chars,
+    skip_kinds=(*DEFAULT_SKIP_KINDS, "rule"),
     skip_prefixes=LANGCHAIN_DOCS_SKIP_PREFIXES,
     include_headings=include_headings,
     min_chars=min_chars,

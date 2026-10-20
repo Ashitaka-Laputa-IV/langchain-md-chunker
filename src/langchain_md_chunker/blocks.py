@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-FENCE_RE = re.compile(r"^ {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+FENCE_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 
 
 HEADING_RE = re.compile(r"^ {0,3}(?P<hashes>#{1,6})[ \t]+(?P<title>.*?)(?:[ \t]+#+)?[ \t]*$")
@@ -28,6 +28,9 @@ RULE_RE = re.compile(
     r"^ {0,3}(?:\*[ \t]*){3,}$|^ {0,3}(?:-[ \t]*){3,}$|^ {0,3}(?:_[ \t]*){3,}$"
 )
 SETEXT_RE = re.compile(r"^ {0,3}(?P<marks>=+|-+)[ \t]*$")
+MATH_RE = re.compile(r"^[ \t]*\$\$")
+CONTAINER_RE = re.compile(r"^[ \t]*:::[ \t]*(?P<name>[A-Za-z][\w-]*)")
+FOOTNOTE_RE = re.compile(r"^\[\^[^\]]+\]:")
 IMPORT_RE = re.compile(r"^import[ \t]+")
 MDX_COMMENT_RE = re.compile(r"^\{/\*")
 
@@ -101,6 +104,25 @@ def parse_blocks(text: str) -> list[Block]:
             index = _read_fence(lines, index, fence, blocks)
             continue
 
+        if MATH_RE.match(source):
+            end = _read_math(lines, index, blocks)
+            if end is not None:
+                index = end
+                continue
+
+        if CONTAINER_RE.match(source):
+            end = _read_container(lines, index)
+            if end is not None:
+                blocks.append(Block("container", line.start, lines[end].end))
+                index = end + 1
+                continue
+
+        if FOOTNOTE_RE.match(source):
+            end = _end_of_footnote(lines, index)
+            blocks.append(Block("footnote", line.start, lines[end].end))
+            index = end + 1
+            continue
+
         heading = HEADING_RE.match(source)
         if heading:
             blocks.append(_heading_block(line, heading))
@@ -125,12 +147,13 @@ def parse_blocks(text: str) -> list[Block]:
             index = end + 1
             continue
 
-        stripped = source.lstrip()
-        if stripped.startswith("|"):
+        if _is_table_start(lines, index):
             end = _end_of_table(lines, index)
             blocks.append(Block("table", line.start, lines[end].end))
             index = end + 1
             continue
+
+        stripped = source.lstrip()
 
         if stripped.startswith(">"):
             end = _end_of_quote(lines, index)
@@ -240,9 +263,31 @@ def _end_of_mdx_comment(lines: list[Line], index: int) -> int:
     return end
 
 
+def _is_table_start(lines: list[Line], index: int) -> bool:
+    """GFM table: a header row with a pipe followed by an alignment row."""
+    if index + 1 >= len(lines) or "|" not in lines[index].text:
+        return False
+    separator = lines[index + 1].text.strip()
+    return (
+        bool(separator)
+        and "-" in separator
+        and separator.count("|") >= 1
+        and all(char in "|:- \t" for char in separator)
+    )
+
+
 def _end_of_table(lines: list[Line], index: int) -> int:
+    """Last row of a table; GFM rows need a pipe but not a leading one."""
     end = index
-    while end + 1 < len(lines) and lines[end + 1].text.lstrip().startswith("|"):
+    while end + 1 < len(lines):
+        following = lines[end + 1].text
+        if (
+            not following.strip()
+            or "|" not in following
+            or HEADING_RE.match(following)
+            or FENCE_RE.match(following)
+        ):
+            break
         end += 1
     return end
 
@@ -275,6 +320,10 @@ def _end_of_paragraph(lines: list[Line], index: int) -> int:
             or FENCE_RE.match(following)
             or EXPORT_RE.match(following)
             or RULE_RE.match(following)
+            or MATH_RE.match(following)
+            or CONTAINER_RE.match(following)
+            or FOOTNOTE_RE.match(following)
+            or _is_table_start(lines, end + 1)
             or following.startswith("<")
             or _setext_level(following) is not None
         ):
@@ -283,12 +332,21 @@ def _end_of_paragraph(lines: list[Line], index: int) -> int:
     return end
 
 
-def _is_closing_fence(line: str, char: str, minimum: int) -> bool:
-    """Whether ``line`` closes a fence opened with ``minimum`` ``char``s."""
-    stripped = line.lstrip(" ")
-    if len(line) - len(stripped) > 3:
+def _indent_width(line: str) -> int:
+    expanded = line.expandtabs(4)
+    return len(expanded) - len(expanded.lstrip(" "))
+
+
+def _is_closing_fence(line: str, char: str, minimum: int, max_indent: int) -> bool:
+    """Whether ``line`` closes a fence opened with ``minimum`` ``char``s.
+
+    A closing fence may be indented at most three columns past the opening one;
+    this is what lets list-item fences work without letting an indented code
+    sample inside a fence terminate it early.
+    """
+    if _indent_width(line) > max_indent:
         return False
-    body = stripped.rstrip(" \t")
+    body = line.lstrip(" \t").rstrip(" \t")
     return len(body) >= minimum and set(body) == {char}
 
 
@@ -298,6 +356,48 @@ def _setext_level(text: str) -> int | None:
     if match is None:
         return None
     return 1 if match.group("marks")[0] == "=" else 2
+
+
+def _read_math(lines: list[Line], index: int, blocks: list[Block]) -> int | None:
+    """Read a ``$$`` display-math block; return the next index or ``None``.
+
+    Treating display math as one atomic block keeps ``#`` inside an equation out
+    of the heading tree. An unclosed ``$$`` falls back to normal paragraph
+    parsing so it cannot swallow the rest of the document.
+    """
+    first = lines[index].text.strip()
+    if first.endswith("$$") and len(first) > 4:
+        blocks.append(Block("math", lines[index].start, lines[index].end))
+        return index + 1
+
+    limit = min(len(lines), index + 400)
+    for end in range(index + 1, limit):
+        if "$$" in lines[end].text:
+            blocks.append(Block("math", lines[index].start, lines[end].end))
+            return end + 1
+    return None
+
+
+def _read_container(lines: list[Line], index: int) -> int | None:
+    """Read a ``:::name ... :::`` container; ``None`` when it is unclosed."""
+    limit = min(len(lines), index + 400)
+    for end in range(index + 1, limit):
+        if lines[end].text.strip() == ":::":
+            return end
+    return None
+
+
+def _end_of_footnote(lines: list[Line], index: int) -> int:
+    """Last line of a footnote definition (continuation lines are indented)."""
+    end = index
+    while end + 1 < len(lines):
+        following = lines[end + 1].text
+        if not following.strip():
+            break
+        if not following.startswith(("    ", "\t")):
+            break
+        end += 1
+    return end
 
 
 def _read_fence(
@@ -313,8 +413,11 @@ def _read_fence(
     info = match.group("info").strip()
     lang = info.split()[0].strip("{}.") if info else ""
 
+    max_indent = _indent_width(match.group("indent")) + 3
     end = index + 1
-    while end < len(lines) and not _is_closing_fence(lines[end].text, char, len(fence)):
+    while end < len(lines) and not _is_closing_fence(
+        lines[end].text, char, len(fence), max_indent
+    ):
         end += 1
     if end < len(lines):
         blocks.append(Block("code", lines[index].start, lines[end].end, lang=lang))
@@ -323,10 +426,12 @@ def _read_fence(
     return len(lines)
 
 
-INNER_FENCE_RE = re.compile(r"^[ \t]*(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>.*)$")
+INNER_FENCE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})[ \t]*(?P<info>.*)$"
+)
 
 
-def _closes_fence(line: str, fence: str) -> bool:
+def _closes_fence(line: str, fence: str, max_indent: int) -> bool:
     match = INNER_FENCE_RE.match(line)
     if match is None:
         return False
@@ -334,6 +439,7 @@ def _closes_fence(line: str, fence: str) -> bool:
     return (
         candidate[0] == fence[0]
         and len(candidate) >= len(fence)
+        and _indent_width(match.group("indent")) <= max_indent
         and not match.group("info").strip()
     )
 
@@ -354,13 +460,14 @@ def _find_mdx_close(lines: list[Line], index: int, name: str) -> int | None:
     open_prefix = f"<{name}"
     depth = 1
     fence: str | None = None
+    fence_indent = 0
     cursor = index + 1
 
     while cursor < len(lines):
         current = lines[cursor].text
 
         if fence is not None:
-            if _closes_fence(current, fence):
+            if _closes_fence(current, fence, fence_indent + 3):
                 fence = None
             cursor += 1
             continue
@@ -368,6 +475,7 @@ def _find_mdx_close(lines: list[Line], index: int, name: str) -> int | None:
         opening = INNER_FENCE_RE.match(current)
         if opening is not None:
             fence = opening.group("fence")
+            fence_indent = _indent_width(opening.group("indent"))
             cursor += 1
             continue
 

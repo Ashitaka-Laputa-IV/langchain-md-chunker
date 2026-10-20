@@ -7,6 +7,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import __version__
 from .chunker import DEFAULT_PATTERNS, Chunker
 from .config import ChunkConfig
 from .presets import langchain_docs
@@ -19,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="chunk",
         description="Split markdown/MDX documents into chunks with source offsets.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("input", help="source directory or file to split")
     parser.add_argument(
         "-o",
@@ -127,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
     chunker = Chunker(config)
     patterns = args.patterns or DEFAULT_PATTERNS
     root = source.parent if source.is_file() else source
+    skipped: list[str] = []
+
+    def record_skip(path: Path, exc: Exception) -> None:
+        skipped.append(f"{path}: {type(exc).__name__}")
+
     try:
         if source.is_file():
             chunks = chunker.split_file(source, root=root, encoding=args.encoding)
@@ -136,12 +143,22 @@ def main(argv: list[str] | None = None) -> int:
                 patterns=patterns,
                 encoding=args.encoding,
                 on_error=args.on_error,
+                on_skip=record_skip if args.on_error == "skip" else None,
             )
     except (OSError, UnicodeDecodeError) as exc:
         if args.on_error != "skip":
             print(f"error: failed to read source files: {exc}", file=sys.stderr)
             return 1
         chunks = []
+        record_skip(source, exc)
+
+    if skipped:
+        print(
+            f"warning: skipped {len(skipped)} unreadable file(s):",
+            file=sys.stderr,
+        )
+        for item in skipped:
+            print(f"  {item}", file=sys.stderr)
 
     if not chunks:
         print(
@@ -151,7 +168,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.verify:
-        problems = verify_chunks(chunks, root)
+        problems = verify_chunks(chunks, root, encoding=args.encoding)
         if problems:
             for problem in problems:
                 print(f"error: {problem}", file=sys.stderr)

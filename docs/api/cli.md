@@ -16,6 +16,7 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
+| `--version` | — | 打印版本号并退出（退出码 `0`） |
 | `INPUT` | **必填** | 源文档**目录或单个文件**。不内置任何默认语料；路径不存在时退出码 `2`。 |
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
 | `--max-chars` | `1500` | 单 chunk 软上限（原文字符数） |
@@ -25,7 +26,7 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 | `--no-merge-small-sections` | 关闭 | 即使设置了 `--min-chars` 也保留小节边界 |
 | `--id-strategy` | `location` | `location`（路径+偏移）或 `content`（内容哈希） |
 | `--encoding` | `utf-8` | 源文件读取编码 |
-| `--on-error` | `raise` | `skip` 时跳过不可读 / 解码失败的文件 |
+| `--on-error` | `raise` | `skip` 时跳过不可读 / 解码失败的文件，并在 stderr 列出跳过的文件 |
 | `-p, --pattern` | `*.md`、`*.mdx`、`*.MD`、`*.MDX` | 文件匹配模式，可重复 |
 | `--verify` | 关闭 | 写盘前回读源文件校验偏移，见 [verify.md](verify.md) |
 | `--quiet` | 关闭 | 只输出错误与警告 |
@@ -42,7 +43,7 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 
 ```text
 $ uv run chunk data/langchain-docs --preset langchain-docs --verify
-180 documents -> 4811 chunks (avg 886.1 chars, max 6525), 0.55s
+180 documents -> 4778 chunks (avg 891.9 chars, max 6525), 0.55s
 chunks  : data/chunks/chunks.jsonl
 manifest: data/chunks/manifest.json
 ```

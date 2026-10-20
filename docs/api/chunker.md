@@ -105,6 +105,7 @@ def split_directory(
     *,
     encoding: str = "utf-8",
     on_error: str = "raise",
+    on_skip: Callable[[Path, Exception], None] | None = None,
 ) -> list[Chunk]
 ```
 
@@ -116,6 +117,7 @@ def split_directory(
 | `patterns` | glob 模式序列，可重复；同一文件只会被切分一次 |
 | `encoding` | 读取编码，默认 `utf-8` |
 | `on_error` | `"raise"`（默认）或 `"skip"`：跳过不可读/解码失败的文件 |
+| `on_skip` | 仅 `on_error="skip"` 时生效的可选回调，接收 `(path, exception)` |
 
 遍历时会跳过 `IGNORED_DIRS`（`.git`、`.venv`、`node_modules` 等）；默认模式同时覆盖小写与大写后缀（`*.md` / `*.MD`）。
 
@@ -142,6 +144,7 @@ def iter_directory(
     *,
     encoding: str = "utf-8",
     on_error: str = "raise",
+    on_skip: Callable[[Path, Exception], None] | None = None,
 ) -> Iterator[Chunk]
 ```
 

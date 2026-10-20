@@ -301,3 +301,92 @@ def test_import_inside_fence_stays_code() -> None:
 
     assert [block.kind for block in blocks] == ["code"]
 
+
+
+def test_indented_fence_in_a_list_item_is_code() -> None:
+    text = "- item\n\n    ```python\n    x = 1\n    ```\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["list", "code"]
+    assert blocks[1].lang == "python"
+    assert text[blocks[1].start : blocks[1].end].startswith("    ```python")
+
+
+def test_display_math_is_one_block() -> None:
+    text = "$$\n# not a heading\na = b + c\n$$\n\n# Real heading\n\ntail\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["math", "heading", "para"]
+    assert "# Real heading" in text[blocks[1].start : blocks[1].end]
+
+
+def test_single_line_display_math() -> None:
+    blocks = parse_blocks("$$ a = b $$\n\nbody\n")
+
+    assert [block.kind for block in blocks] == ["math", "para"]
+
+
+def test_unclosed_display_math_falls_back_to_paragraph() -> None:
+    blocks = parse_blocks("$$\na = b\n\n# Heading\n\ntail\n")
+
+    assert blocks[0].kind == "para"
+    assert any(block.kind == "heading" for block in blocks)
+
+
+def test_gfm_table_without_leading_pipes() -> None:
+    text = "a | b\n--- | ---\n1 | 2\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["table"]
+    assert text[blocks[0].start : blocks[0].end] == "a | b\n--- | ---\n1 | 2"
+
+
+def test_table_starting_right_after_a_paragraph() -> None:
+    text = "intro text\na | b\n--- | ---\n1 | 2\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["para", "table"]
+
+
+def test_container_keeps_headings_out_of_the_tree() -> None:
+    text = ":::note\n# not a heading\nbody\n:::\n\n# Real\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["container", "heading"]
+
+
+def test_footnote_definition_is_one_block() -> None:
+    text = "[^1]: note\n    # not a heading\n\ntail\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["footnote", "para"]
+
+
+def test_unclosed_container_falls_back_to_paragraph() -> None:
+    text = ":::note\nbody\n\n# Heading\n\ntail\n"
+    blocks = parse_blocks(text)
+
+    assert blocks[0].kind != "container"
+    assert any(block.kind == "heading" for block in blocks)
+
+
+def test_footnote_stops_at_an_unindented_line() -> None:
+    text = "[^1]: note\n    continuation\ntail\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["footnote", "para"]
+
+
+def test_footnote_at_end_of_file() -> None:
+    text = "[^1]: note\n    continuation"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["footnote"]
+
+
+def test_indented_fence_inside_a_fence_does_not_close_it() -> None:
+    text = "```md\n    ```\n# still code\n```\n\n# Real heading\n"
+    blocks = parse_blocks(text)
+
+    assert [block.kind for block in blocks] == ["code", "heading"]
+    assert "# still code" in text[blocks[0].start : blocks[0].end]

@@ -12,13 +12,16 @@ from langchain_md_chunker import verify_chunks
 ## `verify_chunks`
 
 ```python
-def verify_chunks(chunks: Iterable[Chunk], root: str | Path) -> list[str]
+def verify_chunks(
+    chunks: Iterable[Chunk], root: str | Path, *, encoding: str = "utf-8"
+) -> list[str]
 ```
 
 | 参数 | 说明 |
 | --- | --- |
 | `chunks` | 待校验的 chunk 序列，通常来自 `Chunker` 或 `read_chunks` |
 | `root` | 源文档根目录；每个 `chunk.doc` 相对它解析 |
+| `encoding` | 读取源文件的编码，必须与 `split_file(encoding=...)` 一致 |
 
 返回问题描述列表；**空列表表示全部一致**。函数不抛异常：源文件不可读也会被收集为问题。
 
@@ -35,7 +38,7 @@ if problems:
 
 | 场景 | 消息 |
 | --- | --- |
-| 文件缺失或不是 UTF-8 | `<doc>: cannot read source file (<异常类型>)` |
+| 文件缺失或无法按 `encoding` 解码 | `<doc>: cannot read source file (<异常类型>)` |
 | 偏移越界或区间非法 | `<id> <doc>: offsets out of range` |
 | 切片内容不符 | `<id> <doc>@<start>:<end>: slice mismatch` |
 

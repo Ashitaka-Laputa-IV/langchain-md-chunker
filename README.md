@@ -11,7 +11,7 @@ API 参考见 [docs/api/index.md](https://github.com/Ashitaka-Laputa-IV/langchai
 ## 特点
 
 - **偏移精确**：chunk 是原文的精确切片，`source[start:end] == chunk.text` 恒成立（切分只挑断点，不改写、不拼接、不重复内容）。
-- **MDX 感知**：跳过 frontmatter 与 `export const ...` 代码块；把 `<Tabs>`、`<CodeGroup>`、`<Accordion>` 等组件当作整体；代码围栏不会被腰斩。
+- **MDX 感知**：跳过 frontmatter / `export` / `import` / MDX 注释；把 `<Tabs>`、`<CodeGroup>`、`<Accordion>`、`:::name` 容器、`$$` 公式与脚注定义当作整体；支持列表内缩进围栏，代码围栏不会被腰斩。
 - **标题感知**：按标题层级分节，chunk 携带该节的标题路径（如 `LangChain > Agents > Middleware`）作为上下文。
 - **标题可写入正文**（可选）：`--include-headings` 会把标题路径按原层级拼进 `content`，更适合 embedding；`text` 仍保持精确切片。
 - **分片语义完整**：超长代码 / 表格 / MDX 组件被切开后，`content` 会自动补回围栏、重复表头、标注组件名，单个片段可以直接拿去 embedding。
@@ -49,6 +49,7 @@ uv run chunk <INPUT> [-o OUTPUT] [--max-chars 1500] [--preset generic|langchain-
 | `-o, --output` | `data/chunks` | chunk 输出目录 |
 | `--preset` | `generic` | 语料预设：`generic` 不丢样板，`langchain-docs` 丢弃 LangChain 文档每页样板 |
 | `--max-chars` | `1500` | 单 chunk 目标上限（字符，针对原文） |
+| `--version` | — | 打印版本号并退出 |
 | `-p, --pattern` | `*.md`, `*.mdx`, `*.MD`, `*.MDX` | 文件匹配模式，可重复 |
 | `--include-headings` | 关闭 | 把标题路径写进 `content`（见下节） |
 | `--min-chars` | `0` | 同一父节下的小节合并阈值；`0` 关闭 |
@@ -73,7 +74,7 @@ data/chunks/
 
 ### 语料预设
 
-核心包本身不知道任何具体语料，默认配置**不做语料相关的丢弃**，CLI 默认也是 `--preset generic`。处理 LangChain 文档时显式启用 `langchain-docs` 预设（丢弃每页重复的索引横幅与页脚）；在 Python 里同样显式选择：
+核心包本身不知道任何具体语料，默认配置**不做语料相关的丢弃**，CLI 默认也是 `--preset generic`。处理 LangChain 文档时显式启用 `langchain-docs` 预设（丢弃每页重复的索引横幅、页脚、空锚点与 `***` 分隔线）；在 Python 里同样显式选择：
 
 ```python
 from langchain_md_chunker import Chunker, langchain_docs
@@ -116,7 +117,7 @@ chunker = Chunker(langchain_docs(max_chars=1200))   # 或 Chunker() 走通用默
 | `context` | `headings` 用 ` > ` 拼接，可直接拼到 embedding 输入前 |
 | `text` | 原文切片，逐字符等于 `source[start:end]` |
 | `content` | 用于 embedding / 展示的文本：`text` 加上标题路径（可选）与分片包装（必要时） |
-| `kind` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx`；跨多种块时为 `mixed` |
+| `kind` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx` / `math` / `container` / `footnote`；跨多种块时为 `mixed` |
 | `lang` | 当 chunk 全部来自同一个代码块时为其围栏语言（如 `python`），否则为空 |
 
 > `content` 中的标题、补出的围栏、重复的表头、MDX 组件注释都是**合成**的，不要拿它回原文定位；
@@ -191,10 +192,10 @@ content = "```python\nprint(42)\n```"
 
 **已知限制与设计取舍**：
 
-- 标题行会与正文首块绑定；超长块按行切分并在 `content` 中补齐语义。只有两种情况会超过 `max_chars`：单行本身超长（无法在不破坏内容的前提下再切），或为避免尾部分隔符单独成块而并入上一片段（只多出分隔符的几个字符，属软上限）。超长单行**正文**会按句末标点 → 逗号 → 硬切回退。
+- 标题行会与正文首块绑定；超长块按行切分并在 `content` 中补齐语义。只有三种情况会超过 `max_chars`：单行本身超长（无法在不破坏内容的前提下再切）；标题必须跟随正文首块（超出部分就是标题长度）；为避免尾部分隔符单独成块而并入上一片段（只多出分隔符的几个字符）。超长单行**正文**会按句末标点 → 逗号 → 硬切回退。
 - `max_chars` 按**字符**而非 token 计量：中英文密度不同，需要 token 预算时请按语料换算后调整。
 - 相邻 chunk **不重叠**：这是“偏移精确、可回溯”的刻意取舍；需要 overlap 的检索策略请在消费端处理。
-- 不支持 4 空格缩进代码块：文档中的缩进更常表示 MDX 组件或列表续行，误判代价高于收益；代码请使用围栏。
+- 不支持 4 空格缩进、**无围栏**的代码块（它更像列表续行或组件内容）；列表项内**带围栏**的代码（任意缩进）已支持。
 - 列表项内的围栏代码会与列表分成相邻块（内容不丢失，通常仍落在同一个 chunk）；若需要片段自带的围栏/表头，请使用 `content`（`text` 始终不含合成内容）。
 - `split_directory` 是单线程同步 IO；5 MB 语料约 0.5 s，更大规模建议按目录分片。
 - 偏移按 Unicode 码点；浏览器/JS 定位需按 UTF-16 换算（`demo/static/app.js` 有示例）。
@@ -305,7 +306,7 @@ data/download_docs.py
 ## 测试
 
 ```bash
-uv run pytest                       # 192 项，秒级
+uv run pytest                       # 216 项，秒级
 uv run pytest --cov                 # 覆盖率（已配置分支覆盖）
 uv run ruff check src demo tests    # 静态检查（ruff 已固定为 dev 依赖）
 ```

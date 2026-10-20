@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from langchain_md_chunker import CHUNKS_FILE, MANIFEST_FILE, cli
+from langchain_md_chunker import CHUNKS_FILE, MANIFEST_FILE, __version__, cli
 
 DOC = "# Title\n\n" + "\n\n".join(f"paragraph {index} " + "x" * 80 for index in range(4)) + "\n"
 
@@ -181,7 +181,7 @@ def test_cli_verify_failure_exits_nonzero(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = make_tree(tmp_path)
-    monkeypatch.setattr(cli, "verify_chunks", lambda chunks, root: ["boom"])
+    monkeypatch.setattr(cli, "verify_chunks", lambda chunks, root, **kwargs: ["boom"])
 
     assert cli.main([str(source), "-o", str(tmp_path / "out"), "--verify"]) == 1
     assert "boom" in capsys.readouterr().err
@@ -225,7 +225,9 @@ def test_cli_on_error_skip_ignores_broken_files(
 
     assert cli.main([str(source), "-o", str(tmp_path / "out"), "--on-error", "skip"]) == 0
 
-    assert capsys.readouterr().err == ""
+    err = capsys.readouterr().err
+    assert "skipped 1 unreadable file(s)" in err
+    assert "broken.md" in err
     assert chunk_count(tmp_path / "out") == 1
 
 
@@ -234,7 +236,9 @@ def test_cli_encoding_option(tmp_path: Path) -> None:
     source.mkdir()
     (source / "latin.md").write_bytes("# T\n\ncafé\n".encode("latin-1"))
 
-    assert cli.main([str(source), "-o", str(tmp_path / "out"), "--encoding", "latin-1"]) == 0
+    assert cli.main(
+        [str(source), "-o", str(tmp_path / "out"), "--encoding", "latin-1", "--verify"]
+    ) == 0
 
     records = [
         json.loads(line)
@@ -251,5 +255,15 @@ def test_cli_on_error_skip_single_unreadable_file(
 
     assert cli.main([str(target), "-o", str(tmp_path / "out"), "--on-error", "skip"]) == 0
 
-    assert "no files matched" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "skipped 1 unreadable file(s)" in err
+    assert "broken.md" in err
     assert chunk_count(tmp_path / "out") == 0
+
+
+def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["--version"])
+
+    assert excinfo.value.code == 0
+    assert __version__ in capsys.readouterr().out

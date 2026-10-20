@@ -25,7 +25,7 @@ class ChunkConfig:
 
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `max_chars` | `int` | `1500` | 单个 chunk 的软上限（按**原文**字符数）。超长块会按行切分；只有单行本身超过上限、或为避免尾部分隔符单独成块时，才可能少量超限。 |
+| `max_chars` | `int` | `1500` | 单个 chunk 的软上限（按**原文**字符数）。超长块会按行切分；只有单行本身超过上限、标题跟随正文首块、或为避免尾部分隔符单独成块时，才可能少量超限。 |
 | `skip_kinds` | `tuple[str, ...]` | `("frontmatter", "export", "import", "comment")` | 不产出 chunk 的块类型。跳过块会同时成为**硬断点**，不会混进相邻 chunk。 |
 | `skip_prefixes` | `tuple[str, ...]` | `()` | 块文本（去掉前导空白）以这些前缀开头时视为样板丢弃。默认空：核心不内置任何语料特征。 |
 | `include_headings` | `bool` | `False` | 为 `True` 时，`Chunk.content` 会加上所在标题路径（`# A` / `## B` / `### C`）；`Chunk.text`、偏移、行号不受影响。 |

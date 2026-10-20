@@ -374,16 +374,16 @@ def test_merge_does_not_mix_heading_levels() -> None:
     assert [chunk.headings for chunk in chunks] == [("A", "B"), ("A", "B", "C")]
 
 
-def test_table_without_alignment_row_still_repeats_its_header() -> None:
-    rows = "\n".join(f"| {index} |" for index in range(40))
-    text = f"| a |\n{rows}\n"
+def test_table_without_leading_pipes_repeats_its_header() -> None:
+    rows = "\n".join(f"{index} | v{index}" for index in range(40))
+    text = f"a | b\n--- | ---\n{rows}\n"
 
     chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
 
     assert len(chunks) > 1
     assert all(chunk.kind == "table" for chunk in chunks)
     for chunk in chunks:
-        assert chunk.content.count("| a |") == 1
+        assert chunk.content.count("a | b") == 1
 
 
 def test_min_chars_ignores_skipped_blocks_when_measuring_sections() -> None:
@@ -453,3 +453,107 @@ def test_merge_counts_the_separators_between_blocks() -> None:
     chunks = Chunker(ChunkConfig(max_chars=160, min_chars=100)).split_text(text)
 
     assert [chunk.headings for chunk in chunks] == [("a1",), ("a2",)]
+
+
+def test_mdx_fragments_reopen_and_close_nested_code_fences() -> None:
+    body = "\n".join(f"print({index})" for index in range(60))
+    text = f"# T\n\n<CodeGroup>\n```python\n{body}\n```\n</CodeGroup>\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=300)).split_text(text)
+
+    assert len(chunks) > 2
+    assert chunks[0].content.startswith("# T\n\n<CodeGroup>\n```python")
+    for chunk in chunks[1:]:
+        assert chunk.content.startswith("{/* <CodeGroup> */}\n```python")
+    for chunk in chunks:
+        assert chunk.content.count("```") % 2 == 0
+        assert chunk.text in chunk.content
+    assert chunks[-1].content.rstrip().endswith("</CodeGroup>")
+    for chunk in chunks[:-1]:
+        assert chunk.content.endswith("{/* </CodeGroup> */}")
+
+
+def test_indented_code_in_a_list_is_split_as_code() -> None:
+    body = "\n".join(f"print({index})" for index in range(40))
+    text = f"- item\n\n    ```python\n{body}\n    ```\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    code = [chunk for chunk in chunks if chunk.kind == "code"]
+    assert len(code) > 1
+    assert all(chunk.lang == "python" for chunk in code)
+    assert all(chunk.content.lstrip().startswith("```python") for chunk in code)
+    assert all(chunk.content.rstrip().endswith("```") for chunk in code)
+
+
+def test_math_fragments_reopen_and_close_the_math_block() -> None:
+    body = "\n".join(f"a_{index} = {index}" for index in range(80))
+    text = f"$$\n{body}\n$$\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    assert len(chunks) > 2
+    assert all(chunk.kind == "math" for chunk in chunks)
+    for chunk in chunks:
+        assert chunk.content.count("$$") % 2 == 0
+        assert chunk.content.startswith("$$")
+        assert chunk.content.endswith("$$")
+
+
+def test_last_code_fragment_is_not_an_orphan() -> None:
+    body = "\n".join(f"line_{index} = {index}" for index in range(40)) + "\nreturn None"
+    text = f"# T\n\n```python\n{body}\n```\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=300)).split_text(text)
+
+    assert len(chunks) > 1
+    assert all(chunk.chars >= 50 for chunk in chunks[1:])
+
+
+def test_open_fence_tracks_state_at_cut_points() -> None:
+    from langchain_md_chunker.splitter import _open_fence
+
+    text = "intro\n```python\nx = 1\n```\noutro\n"
+
+    assert _open_fence(text, 0, text.index("x = 1")) == "```python"
+    assert _open_fence(text, 0, text.index("intro")) is None
+    assert _open_fence(text, 0, len(text)) is None
+
+
+def test_langchain_preset_drops_rules_and_page_anchors() -> None:
+    text = '# T\n\n***\n\n<a id="section" />\n\nreal body\n'
+
+    chunks = Chunker(langchain_docs()).split_text(text)
+
+    assert chunks
+    assert all("***" not in chunk.text and "<a id" not in chunk.text for chunk in chunks)
+    assert any("real body" in chunk.text for chunk in chunks)
+
+
+def test_container_fragment_reopens_the_container_and_fence() -> None:
+    body = "\n".join(f"print({index})" for index in range(60))
+    text = f":::note\n```python\n{body}\n```\n:::\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=300)).split_text(text)
+
+    assert len(chunks) > 1
+    assert all(chunk.kind == "container" for chunk in chunks)
+    assert chunks[0].content.startswith(":::note\n```python")
+    for chunk in chunks[1:]:
+        assert chunk.content.startswith(":::note\n```python")
+    for chunk in chunks:
+        assert chunk.content.count("```") % 2 == 0
+    for chunk in chunks[:-1]:
+        assert chunk.content.endswith(":::")
+
+
+def test_container_fragment_without_code_only_reopens_the_container() -> None:
+    body = "\n\n".join("word " * 30 for _ in range(6))
+    text = f":::note\n{body}\n:::\n"
+
+    chunks = Chunker(ChunkConfig(max_chars=200)).split_text(text)
+
+    assert len(chunks) > 2
+    for chunk in chunks[1:-1]:
+        assert chunk.content.startswith(":::note\n")
+        assert chunk.content.endswith("\n:::")

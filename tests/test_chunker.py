@@ -346,3 +346,14 @@ def test_iter_directory_validates_before_iteration(tmp_path: Path) -> None:
         Chunker().iter_directory(tmp_path / "missing")
     with pytest.raises(ValueError, match="on_error"):
         Chunker().iter_directory(tmp_path, on_error="warn")
+
+
+def test_verify_chunks_honours_encoding(tmp_path: Path) -> None:
+    target = tmp_path / "latin.md"
+    target.write_bytes("# T\n\ncafé\n".encode("latin-1"))
+    chunks = Chunker().split_file(target, root=tmp_path, encoding="latin-1")
+
+    assert verify_chunks(chunks, tmp_path, encoding="latin-1") == []
+    problems = verify_chunks(chunks, tmp_path)
+    assert len(problems) == 1
+    assert "cannot read" in problems[0]

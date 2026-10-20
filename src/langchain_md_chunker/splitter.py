@@ -188,11 +188,40 @@ def _split_oversized(block: Block, text: str, max_chars: int) -> list[tuple[int,
     if len(spans) > 1:
         tail = text[spans[-1][0] : spans[-1][1]].strip()
         delimiter = (
-            block.kind == "code" and bool(tail) and set(tail) <= {"`", "~"}
-        ) or (block.kind == "mdx" and tail.startswith("</"))
+            (block.kind == "code" and bool(tail) and set(tail) <= {"`", "~"})
+            or (block.kind == "mdx" and tail.startswith("</"))
+            or (block.kind == "math" and tail == "$$")
+        )
         if delimiter:
             spans[-2] = (spans[-2][0], spans[-1][1])
             spans.pop()
+
+    # Avoid a tiny last fragment (``return None`` + fence): move whole lines
+    # from the previous span until the tail is reasonably sized. This keeps the
+    # soft bound instead of overshooting it.
+    tail_min = min(max_chars, max(50, max_chars // 20))
+    if block.kind not in _TEXT_KINDS:
+        # A small last fragment that still fits together with the previous one
+        # is simply merged back (no overshoot, no wrapper needed).
+        if (
+            len(spans) > 1
+            and spans[-1][1] - spans[-1][0] < tail_min
+            and spans[-1][1] - spans[-2][0] <= max_chars
+        ):
+            spans[-2] = (spans[-2][0], spans[-1][1])
+            spans.pop()
+
+        line_starts = [base + line.start for line in lines]
+        while len(spans) > 1 and spans[-1][1] - spans[-1][0] < tail_min:
+            last_line = bisect.bisect_left(line_starts, spans[-1][0])
+            previous_line = bisect.bisect_left(line_starts, spans[-2][0])
+            if last_line - 1 <= previous_line:
+                break
+            new_previous_end = base + lines[last_line - 2].end
+            if new_previous_end - spans[-2][0] < max_chars // 2:
+                break
+            spans[-2] = (spans[-2][0], new_previous_end)
+            spans[-1] = (base + lines[last_line - 1].start, spans[-1][1])
 
     return spans
 
@@ -212,29 +241,105 @@ def _code_wrapper(
 
 
 def _table_header(block: Block, text: str) -> str:
-    """Header row (plus alignment row when present) to repeat in table fragments."""
+    """Header row and alignment row, repeated in table fragments."""
     lines = text[block.start : block.end].split("\n")
-    if not lines:  # pragma: no cover - a parsed block is never empty
-        return ""
-    header = [lines[0]]
-    second = next(iter(lines[1:2]), "")
-    rule = second.strip()
-    if rule and "-" in rule and all(char in "|:- \t" for char in rule):
-        header.append(second)
-    return "\n".join(header) + "\n"
+    return "\n".join(lines[:2]) + "\n"
+
+
+_FENCE_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$"
+)
+
+
+def _indent_width(line: str) -> int:
+    expanded = line.expandtabs(4)
+    return len(expanded) - len(expanded.lstrip(" "))
+
+
+def _open_fence(text: str, start: int, end: int) -> str | None:
+    """Opening fence line still in effect at ``end``, or ``None`` outside code.
+
+    MDX components often wrap fenced code. When such a component is split, a
+    fragment may start or end inside a fence; reopening/closing it keeps the
+    fragment valid Markdown (the component name comment alone is not enough).
+    """
+    fence: str | None = None
+    fence_indent = -1
+    opening = ""
+    for line in text[start:end].split("\n"):
+        match = _FENCE_LINE_RE.match(line)
+        if fence is None:
+            if match:
+                fence = match.group("fence")
+                fence_indent = _indent_width(match.group("indent"))
+                # Keep the original indentation: the fragment's closing fence
+                # still carries it, and a re-indented opening would not match.
+                opening = line.rstrip()
+            continue
+        if (
+            match
+            and match.group("fence")[0] == fence[0]
+            and len(match.group("fence")) >= len(fence)
+            and _indent_width(match.group("indent")) <= fence_indent + 3
+            and not match.group("info").strip()
+        ):
+            fence = None
+    return opening if fence is not None else None
+
+
+def _math_wrapper(partial_start: bool, partial_end: bool) -> tuple[str, str]:
+    return ("$$\n" if partial_start else "", "\n$$" if partial_end else "")
+
+
+def _container_wrapper(
+    block: Block, text: str, start: int, end: int
+) -> tuple[str, str]:
+    """Reopen a ``:::name`` container and any nested fence around a fragment."""
+    opening_line = text[block.start : block.end].split("\n", 1)[0].strip()
+    prefix = f"{opening_line}\n" if start > block.start else ""
+    if start > block.start:
+        fence = _open_fence(text, block.start, start)
+        if fence:
+            prefix += f"{fence}\n"
+
+    suffix = ""
+    if end < block.end:
+        fence = _open_fence(text, block.start, end)
+        if fence:
+            match = _FENCE_LINE_RE.match(fence)
+            assert match is not None  # _open_fence returns a matched line
+            suffix += f"\n{match.group('fence')}"
+        suffix += "\n:::"
+    return prefix, suffix
 
 
 def _mdx_wrapper(
-    block: Block, text: str, partial_start: bool, partial_end: bool
+    block: Block, text: str, start: int, end: int
 ) -> tuple[str, str]:
-    """Annotate a fragment of a split MDX component with the component name."""
+    """Annotate a fragment of a split MDX component.
+
+    The fragment gets the component name comment, plus a reopened / closed
+    fenced code block when the cut happened inside one.
+    """
     first = text[block.start : block.end].split("\n", 1)[0].strip()
     match = MDX_OPEN_RE.match(first)
     name = match.group("name") if match else "MDX"
-    return (
-        f"{{/* <{name}> */}}\n" if partial_start else "",
-        f"\n{{/* </{name}> */}}" if partial_end else "",
-    )
+
+    prefix = f"{{/* <{name}> */}}\n" if start > block.start else ""
+    if start > block.start:
+        opening = _open_fence(text, block.start, start)
+        if opening:
+            prefix += f"{opening}\n"
+
+    suffix = ""
+    if end < block.end:
+        opening = _open_fence(text, block.start, end)
+        if opening:
+            fence = _FENCE_LINE_RE.match(opening)
+            assert fence is not None  # _open_fence returns a matched line
+            suffix += f"\n{fence.group('fence')}"
+        suffix += f"\n{{/* </{name}> */}}"
+    return prefix, suffix
 
 
 def _unit_pieces(unit: _Unit, text: str, config: ChunkConfig) -> list[_Piece]:
@@ -275,7 +380,11 @@ def _unit_pieces(unit: _Unit, text: str, config: ChunkConfig) -> list[_Piece]:
                 elif block.kind == "table":
                     prefix = table_header if partial_start else ""
                 elif block.kind == "mdx":
-                    prefix, suffix = _mdx_wrapper(block, text, partial_start, partial_end)
+                    prefix, suffix = _mdx_wrapper(block, text, start, end)
+                elif block.kind == "math":
+                    prefix, suffix = _math_wrapper(partial_start, partial_end)
+                elif block.kind == "container":
+                    prefix, suffix = _container_wrapper(block, text, start, end)
             pieces.append(
                 _Piece(
                     start,

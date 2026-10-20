@@ -16,6 +16,8 @@ import os
 import tempfile
 from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _package_version
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -25,6 +27,20 @@ from .models import Chunk
 CHUNKS_FILE = "chunks.jsonl"
 MANIFEST_FILE = "manifest.json"
 FORMAT_VERSION = 1
+
+try:
+    PACKAGE_VERSION = _package_version("langchain-md-chunker")
+except PackageNotFoundError:  # pragma: no cover - only without installed metadata
+    PACKAGE_VERSION = "0.0.0"
+
+
+def _source_root_label(source_root: str | Path) -> str:
+    """Prefer a path relative to the current directory (reproducible, no home dirs)."""
+    resolved = Path(source_root).resolve()
+    try:
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
 
 
 def _atomic_write(path: Path, writer: Callable[[TextIO], None]) -> None:
@@ -106,10 +122,18 @@ def build_manifest(
     """Summarise a chunking run for the store's ``manifest.json``."""
     docs = {chunk.doc for chunk in chunks}
     sizes = [chunk.chars for chunk in chunks]
+    epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    try:
+        generated = (
+            datetime.fromtimestamp(int(epoch), UTC) if epoch else datetime.now(UTC)
+        )
+    except ValueError:
+        generated = datetime.now(UTC)
     return {
         "format_version": FORMAT_VERSION,
-        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "source_root": str(Path(source_root).resolve()),
+        "generated_at": generated.isoformat(timespec="seconds"),
+        "source_root": _source_root_label(source_root),
+        "package_version": PACKAGE_VERSION,
         "config": {
             "max_chars": config.max_chars,
             "skip_kinds": list(config.skip_kinds),

@@ -37,7 +37,7 @@ class Chunk:
 | `context` | `str` | `headings` 用 ` > ` 连接，可直接拼到 embedding 输入前。 |
 | `text` | `str` | 原文切片，逐字符等于 `source[start:end]`。 |
 | `content` | `str` | 供 embedding / 展示使用：`text` 加上标题路径（`include_headings`）与分片包装（必要时）。包装包括补出的代码围栏、重复的表头、MDX 组件名注释。 |
-| `kind` | `str` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx`；跨多种块时为 `mixed`，只有标题时为 `text`。 |
+| `kind` | `str` | 主导块类型：`para` / `code` / `table` / `list` / `quote` / `mdx` / `math` / `container` / `footnote`；跨多种块时为 `mixed`，只有标题时为 `text`。 |
 | `lang` | `str` | chunk 全部来自同一个代码块时为其围栏语言（`python` 等），否则为空。 |
 
 ### `chars`

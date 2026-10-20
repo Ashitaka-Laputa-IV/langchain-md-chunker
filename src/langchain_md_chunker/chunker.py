@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 from .config import ChunkConfig
@@ -140,6 +140,7 @@ class Chunker:
         *,
         encoding: str = "utf-8",
         on_error: str = "raise",
+        on_skip: Callable[[Path, Exception], None] | None = None,
     ) -> Iterator[Chunk]:
         """Yield chunks file by file, in a stable order.
 
@@ -148,8 +149,10 @@ class Chunker:
             patterns: Glob patterns selecting files.
             encoding: Encoding used to read each file.
             on_error: ``"raise"`` (default) propagates read/decoding errors;
-                ``"skip"`` silently ignores unreadable files, which is useful
-                for mixed-encoding corpora.
+                ``"skip"`` ignores unreadable files, which is useful for
+                mixed-encoding corpora.
+            on_skip: Optional callback receiving ``(path, exception)`` for every
+                file skipped under ``on_error="skip"``.
         """
         if on_error not in ON_ERROR_MODES:
             raise ValueError(f"on_error must be one of {ON_ERROR_MODES}")
@@ -171,9 +174,11 @@ class Chunker:
             for file_path in files:
                 try:
                     yield from self.split_file(file_path, root=base, encoding=encoding)
-                except (OSError, UnicodeDecodeError):
+                except (OSError, UnicodeDecodeError) as exc:
                     if on_error == "raise":
                         raise
+                    if on_skip is not None:
+                        on_skip(file_path, exc)
 
         # Validate eagerly: the caller gets the error here, not on first next().
         return generate()
@@ -185,13 +190,22 @@ class Chunker:
         *,
         encoding: str = "utf-8",
         on_error: str = "raise",
+        on_skip: Callable[[Path, Exception], None] | None = None,
     ) -> list[Chunk]:
         """Split every matching file under ``root``, in a stable order.
 
         A thin materialisation of :meth:`iter_directory`; use the iterator for
         very large corpora to keep only one file's chunks in memory.
         """
-        return list(self.iter_directory(root, patterns, encoding=encoding, on_error=on_error))
+        return list(
+            self.iter_directory(
+                root,
+                patterns,
+                encoding=encoding,
+                on_error=on_error,
+                on_skip=on_skip,
+            )
+        )
 
 
 __all__ = ["DEFAULT_PATTERNS", "IGNORED_DIRS", "ON_ERROR_MODES", "Chunker"]
