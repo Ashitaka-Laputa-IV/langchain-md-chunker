@@ -5,6 +5,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-20
+
 ### 变更
 
 - 最低 Python 版本从 3.13 降至 **3.11**，并补充 3.11 / 3.12 classifier。
@@ -41,5 +43,6 @@
 - `chunks.jsonl` 与 `manifest.json` 分别原子替换，不是跨文件事务。
 - 仅支持 Python 3.13+。
 
-[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Ashitaka-Laputa-IV/langchain-md-chunker/releases/tag/v0.1.0
